@@ -5,9 +5,17 @@
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxi typecheck"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^3.1.1"
   },
   "dependencies": {
     "nuxt": "^4.4.2",

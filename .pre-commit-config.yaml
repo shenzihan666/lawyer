@@ -1,0 +1,72 @@
+default_install_hook_types:
+  - pre-commit
+  - pre-push
+  - commit-msg
+
+default_stages:
+  - pre-commit
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-json
+        exclude: ^frontend/tsconfig\.json$
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: backend-ruff-format
+        name: backend ruff format
+        entry: python3 scripts/run_backend_ruff.py format
+        language: system
+        files: ^backend/.*\.py$
+
+      - id: backend-ruff-check
+        name: backend ruff check
+        entry: python3 scripts/run_backend_ruff.py check --fix --force-exclude
+        language: system
+        files: ^backend/.*\.py$
+
+      - id: frontend-prettier
+        name: frontend prettier
+        entry: python3 scripts/run_frontend_prettier.py
+        language: system
+        files: ^frontend/.*\.(css|html|js|json|md|mjs|ts|vue|ya?ml)$
+
+      - id: backend-tests
+        name: backend tests
+        entry: uv run --directory backend pytest
+        language: system
+        pass_filenames: false
+        stages:
+          - pre-push
+
+      - id: frontend-typecheck
+        name: frontend typecheck
+        entry: pnpm --dir frontend exec nuxi typecheck
+        language: system
+        pass_filenames: false
+        stages:
+          - pre-push
+
+      - id: frontend-build
+        name: frontend build
+        entry: pnpm --dir frontend run build
+        language: system
+        pass_filenames: false
+        stages:
+          - pre-push
+
+      - id: commit-msg
+        name: conventional commit message
+        entry: python3 scripts/validate_commit_msg.py
+        language: system
+        stages:
+          - commit-msg
