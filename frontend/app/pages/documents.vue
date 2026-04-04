@@ -282,6 +282,30 @@ onMounted(() => {
               >
                 排队中
               </UBadge>
+              <UBadge
+                v-else-if="(row.original as any).vector_status === 'indexing'"
+                color="warning"
+                variant="subtle"
+                size="xs"
+              >
+                索引中
+              </UBadge>
+              <UBadge
+                v-else-if="(row.original as any).vector_status === 'indexed'"
+                color="success"
+                variant="subtle"
+                size="xs"
+              >
+                已索引
+              </UBadge>
+              <UBadge
+                v-else-if="(row.original as any).vector_status === 'failed'"
+                color="error"
+                variant="subtle"
+                size="xs"
+              >
+                索引失败
+              </UBadge>
             </div>
           </template>
 
@@ -313,7 +337,9 @@ onMounted(() => {
                 :disabled="
                   isWorking ||
                   (row.original as any).ingestion_status !== 'ready' ||
-                  (row.original as any).vector_status === 'queued'
+                  ['queued', 'indexing', 'indexed'].includes(
+                    (row.original as any).vector_status,
+                  )
                 "
                 @click="handleQueueVectorization([(row.original as any).id])"
               />

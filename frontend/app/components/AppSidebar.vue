@@ -9,7 +9,7 @@ const route = useRoute();
 const navItems = [
   { label: "新对话", path: "/", icon: "i-lucide-pencil-line" },
   { label: "知识库", path: "/documents", icon: "i-lucide-book-open" },
-  { label: "AI 创作", path: "/search", icon: "i-lucide-sparkles" },
+  { label: "智能检索", path: "/search", icon: "i-lucide-search" },
   {
     label: "更多",
     icon: "i-lucide-layout-grid",

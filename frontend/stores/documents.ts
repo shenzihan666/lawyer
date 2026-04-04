@@ -16,7 +16,7 @@ export type DocumentItem = {
   ingestion_status: string;
   vector_status: string;
   failure_reason: string | null;
-  trace_metadata: Record<string, string | number | boolean | null>;
+  trace_metadata: Record<string, unknown>;
   uploaded_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -27,6 +27,8 @@ export type DocumentSummary = {
   ready: number;
   failed: number;
   vector_queued: number;
+  vector_indexed: number;
+  vector_failed: number;
   deleted: number;
 };
 
@@ -52,6 +54,8 @@ export const useDocumentStore = defineStore("documents", () => {
     ready: 0,
     failed: 0,
     vector_queued: 0,
+    vector_indexed: 0,
+    vector_failed: 0,
     deleted: 0,
   });
 
@@ -65,6 +69,8 @@ export const useDocumentStore = defineStore("documents", () => {
     summary.ready = payload.summary.ready;
     summary.failed = payload.summary.failed;
     summary.vector_queued = payload.summary.vector_queued;
+    summary.vector_indexed = payload.summary.vector_indexed;
+    summary.vector_failed = payload.summary.vector_failed;
     summary.deleted = payload.summary.deleted;
   }
 
@@ -164,7 +170,7 @@ export const useDocumentStore = defineStore("documents", () => {
       selectedIds.value = selectedIds.value.filter((id) => !ids.includes(id));
       toast.add({
         title: "操作成功",
-        description: `已标记 ${payload.affected_ids?.length ?? 0} 个文档进入向量化队列`,
+        description: `已完成 ${payload.affected_ids?.length ?? 0} 个文档的向量索引`,
         color: "success",
       });
     } catch (error) {
