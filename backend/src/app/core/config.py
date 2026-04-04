@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     app_name: str = "Lawyer Backend"
     api_v1_prefix: str = "/api/v1"
-    database_url: str = "sqlite+pysqlite:///./data/lawyer.db"
+    database_url: str = "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/lawyer"
     frontend_origins: list[str] = [
         "http://127.0.0.1:3000",
         "http://localhost:3000",
@@ -24,6 +24,20 @@ class Settings(BaseSettings):
     milvus_token: str | None = None
     milvus_database: str = "default"
     milvus_collection: str = "law_documents"
+    redis_url: str = "redis://127.0.0.1:6379/0"
+    redis_key_prefix: str = "lawyer"
+    redis_cache_ttl_seconds: int = 300
+    base_url: str | None = None
+    embedder: str | None = None
+    ark_api_key: str | None = None
+    embedding_timeout_seconds: int = 30
+    vector_dense_dimension: int = 2560
+    vector_sparse_dimension: int = 262144
+    vector_leaf_chunk_size: int = 900
+    vector_leaf_chunk_overlap: int = 150
+    vector_parent_group_size: int = 4
+    vector_search_top_k: int = 5
+    vector_auto_merge_threshold: int = 2
 
     @field_validator("frontend_origins", mode="before")
     @classmethod
@@ -46,10 +60,6 @@ class Settings(BaseSettings):
         if root.is_absolute():
             return root
         return self.backend_root / root
-
-    @property
-    def is_sqlite(self) -> bool:
-        return self.database_url.startswith("sqlite")
 
 
 @lru_cache

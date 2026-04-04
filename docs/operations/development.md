@@ -28,6 +28,12 @@ Backend with reload:
 UVICORN_RELOAD=true uv run --directory backend backend
 ```
 
+Infrastructure stack:
+
+```bash
+docker compose up -d postgres redis etcd minio standalone
+```
+
 Frontend:
 
 ```bash
@@ -64,6 +70,7 @@ backend/.venv/bin/pre-commit run --hook-stage pre-push --all-files -c .pre-commi
 
 ## Local Defaults
 
-- backend will use local SQLite if `DATABASE_URL` is unset
+- backend expects PostgreSQL in `DATABASE_URL`
 - uploads default to `backend/uploads/`
 - API default expected by frontend is `http://127.0.0.1:8000/api/v1`
+- vector retrieval defaults expect Redis on `6379` and Milvus on `19530`

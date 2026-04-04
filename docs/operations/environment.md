@@ -5,8 +5,7 @@
 ### `DATABASE_URL`
 
 - Purpose: metadata database connection string
-- Local default: `sqlite+pysqlite:///./data/lawyer.db`
-- Production target: PostgreSQL via `psycopg`
+- Required runtime target: PostgreSQL via `psycopg`
 
 Example:
 
@@ -33,8 +32,7 @@ export FRONTEND_ORIGINS="http://127.0.0.1:3000,http://localhost:3000"
 
 ### `MILVUS_URI`
 
-- Purpose: future vector database endpoint
-- Current status: reserved, not actively used for embedding writes yet
+- Purpose: Milvus vector database endpoint used by indexing and retrieval
 
 ### `MILVUS_TOKEN`
 
@@ -46,7 +44,45 @@ export FRONTEND_ORIGINS="http://127.0.0.1:3000,http://localhost:3000"
 
 ### `MILVUS_COLLECTION`
 
-- Purpose: future collection target for document vectors
+- Purpose: collection target for document vectors
+
+### `BASE_URL`
+
+- Purpose: external embedding API base URL
+- Example: `https://your-llm-endpoint/v1`
+
+### `EMBEDDER`
+
+- Purpose: embedding model name sent to the external embedding API
+
+### `ARK_API_KEY`
+
+- Purpose: bearer token for the external embedding API
+
+### `EMBEDDING_TIMEOUT_SECONDS`
+
+- Purpose: timeout for the external embedding request
+- Default: `30`
+
+### `REDIS_URL`
+
+- Purpose: Redis cache connection for chunk/search caching
+- Default: `redis://127.0.0.1:6379/0`
+
+### `REDIS_KEY_PREFIX`
+
+- Purpose: namespace prefix for Redis keys
+- Default: `lawyer`
+
+### `VECTOR_DENSE_DIMENSION`
+
+- Purpose: dense embedding dimension written to Milvus
+- Default: `2560`
+
+### `VECTOR_SPARSE_DIMENSION`
+
+- Purpose: local sparse vector space size for hybrid retrieval
+- Default: `262144`
 
 ## Frontend Variables
 
@@ -64,5 +100,6 @@ export NUXT_PUBLIC_API_BASE="http://127.0.0.1:8000/api/v1"
 ## Operational Guidance
 
 - local development can run without PostgreSQL or Milvus
-- production should move metadata to PostgreSQL
-- Milvus settings should be treated as reserved integration points for the next phase
+- local vector search needs PostgreSQL, Redis, and Milvus available together
+- production should run PostgreSQL for metadata and chunk storage
+- Redis should be treated as a cache layer, not the source of truth

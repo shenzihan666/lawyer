@@ -47,7 +47,7 @@ export DATABASE_URL="postgresql+psycopg://postgres:postgres@127.0.0.1:5432/lawye
 export MILVUS_URI="http://127.0.0.1:19530"
 ```
 
-For local bootstrap, the backend falls back to a SQLite database under `backend/data/` if `DATABASE_URL` is not set.
+The backend expects PostgreSQL to be available through `DATABASE_URL`.
 
 Run the app locally:
 

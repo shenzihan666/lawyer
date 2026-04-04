@@ -24,7 +24,7 @@ Read in this order:
 
 - Frontend: `Nuxt 4`, `Vue 3`, `TypeScript`, `pnpm`
 - Backend: `FastAPI`, `Python 3.13`, `uv`
-- Persistence: `SQLAlchemy`, local `SQLite` fallback, production `PostgreSQL`
+- Persistence: `SQLAlchemy` + `PostgreSQL`
 - Vector target: `Milvus`
 - Loaders: `PyPDFLoader`, `Docx2txtLoader`, `UnstructuredExcelLoader`
 
