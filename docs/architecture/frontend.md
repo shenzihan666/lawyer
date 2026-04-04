@@ -16,6 +16,9 @@ Current UI is split into a light app shell plus page routes:
 - grounded chat workspace: `frontend/app/pages/chat.vue`
 - document workspace: `frontend/app/pages/documents.vue`
 - sidebar navigation: `frontend/app/components/AppSidebar.vue`
+- chat state store: `frontend/stores/chat.ts`
+- document state store: `frontend/stores/documents.ts`
+- UI shell state store: `frontend/stores/ui.ts`
 - runtime config: `frontend/nuxt.config.ts`
 
 ## Current Responsibilities

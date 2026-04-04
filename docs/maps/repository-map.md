@@ -76,7 +76,7 @@ frontend/
 - `app/pages/index.vue`: redirect entrypoint to the chat workspace
 - `app/pages/chat.vue`: grounded Q&A page with citations
 - `app/pages/documents.vue`: document upload and management page
-- `app/stores/chat.ts`: answer request state and citation payload handling
+- `stores/chat.ts`: answer request state and citation payload handling
 - `app/components/AppSidebar.vue`: left navigation sidebar
 - `nuxt.config.ts`: runtime config, including public API base
 - `package.json`: `pnpm` scripts and frontend dependencies

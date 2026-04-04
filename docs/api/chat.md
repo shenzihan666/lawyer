@@ -12,7 +12,7 @@ Request body:
 
 ```json
 {
-  "query": "房屋被他人占有时，我应该如何主张返还原物？",
+  "query": "房屋被他人占有时，我应如何主张返还原物？",
   "top_k": 5,
   "document_ids": ["uuid-1"]
 }
@@ -30,7 +30,7 @@ Response shape:
 
 ```json
 {
-  "answer": "可以先主张返还原物，并重点核查对方是否具有合法占有依据。[1][2]",
+  "answer": "可以先主张返还原物，并重点核查对方是否具备合法占有依据。[1][2]",
   "citations": [
     {
       "citation_number": 1,
@@ -46,4 +46,38 @@ Response shape:
     "search_meta": {}
   }
 }
+```
+
+### `POST /api/v1/chat/stream`
+
+Request body:
+
+```json
+{
+  "query": "房屋被他人占有时，我应如何主张返还原物？",
+  "top_k": 5,
+  "document_ids": ["uuid-1"]
+}
+```
+
+Behavior:
+
+- returns `text/event-stream`
+- emits retrieval progress before answer text generation
+- streams answer text incrementally with `content` events
+- emits a terminal `result` event carrying the final `answer`, `citations`, and `meta`
+- emits `[DONE]` as the final SSE payload
+
+Event examples:
+
+```text
+data: {"type":"rag_step","step":{"key":"search-start","label":"开始检索证据","detail":"top_k=5，文档范围 1","status":"running"}}
+
+data: {"type":"content","content":"可以先主张返还原物"}
+
+data: {"type":"trace","rag_trace":{"retrieval_mode":"multi_stage"}}
+
+data: {"type":"result","answer":"可以先主张返还原物。[1]","citations":[...],"meta":{"generation_mode":"llm_stream"}}
+
+data: [DONE]
 ```
