@@ -23,11 +23,15 @@ Important variables:
 - `LOG_LEVEL`: root log level, defaults to `INFO`
 - `LOG_ROOT_PATH`: log directory, defaults to `logs`
 - `LOG_RETENTION_DAYS`: daily log retention count, defaults to `30`
-- `MILVUS_URI`: reserved for later vectorization integration
-- `MILVUS_COLLECTION`: reserved target collection name
+- `MILVUS_URI`: Milvus vector database endpoint
+- `MILVUS_COLLECTION`: target collection name
 - `EMBEDDING_BASE_URL`: embedding API base URL
 - `EMBEDDING_MODEL`: embedding model name
 - `EMBEDDING_API_KEY`: embedding API token
+- `QUERY_REWRITE_ENABLED`: enable relevance grading and second-stage retrieval
+- `QUERY_REWRITE_BASE_URL`: OpenAI-compatible chat API base URL for query rewriting
+- `QUERY_REWRITE_MODEL`: chat model used for relevance grading, step-back rewriting, and HyDE
+- `QUERY_REWRITE_API_KEY`: API token for the rewrite model
 
 Create a local env file before running the backend:
 
@@ -40,6 +44,7 @@ Legacy aliases remain supported for compatibility:
 - `BASE_URL` -> `EMBEDDING_BASE_URL`
 - `EMBEDDER` -> `EMBEDDING_MODEL`
 - `ARK_API_KEY` -> `EMBEDDING_API_KEY`
+- `BASE_URL` / `ARK_API_KEY` / `MODEL` can also be reused by query rewrite if dedicated rewrite variables are not set
 
 The backend writes structured JSON logs to `backend/logs/` with daily rotation:
 

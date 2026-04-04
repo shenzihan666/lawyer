@@ -1,5 +1,6 @@
 from collections import defaultdict
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
 from typing import Any
@@ -18,6 +19,7 @@ from app.services.vectors.embeddings import (
     ExternalEmbeddingService,
 )
 from app.services.vectors.milvus import MilvusVectorIndex
+from app.services.vectors.query_rewrite import QueryRewriteService
 from app.services.vectors.store import DocumentChunkStore
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,14 @@ logger = logging.getLogger(__name__)
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+@dataclass(slots=True)
+class SearchAttempt:
+    stage: str
+    query: str
+    items: list[dict[str, Any]]
+    meta: dict[str, Any]
 
 
 class DocumentVectorService:
@@ -35,6 +45,7 @@ class DocumentVectorService:
         self.chunk_store = DocumentChunkStore(db=db, cache=self.cache)
         self.dense_embedding_service = ExternalEmbeddingService(settings)
         self.sparse_embedding_service = BM25SparseEmbeddingService(settings)
+        self.query_rewrite_service = QueryRewriteService(settings)
         self.milvus = MilvusVectorIndex(settings)
 
     def index_documents(self, document_ids: Sequence[str]) -> list[str]:
@@ -229,10 +240,13 @@ class DocumentVectorService:
 
         effective_top_k = top_k or self.settings.vector_search_top_k
         selected_document_ids = sorted({item for item in (document_ids or []) if item})
+        query_rewrite_enabled = self.query_rewrite_service.is_enabled()
         cache_payload = {
             "query": normalized_query,
             "top_k": effective_top_k,
             "document_ids": selected_document_ids,
+            "query_rewrite_enabled": query_rewrite_enabled,
+            "query_rewrite_model": self.settings.query_rewrite_model or "",
         }
         cached = self.chunk_store.get_cached_search(cache_payload)
         if cached is not None:
@@ -243,33 +257,336 @@ class DocumentVectorService:
                     "query_length": len(normalized_query),
                     "top_k": effective_top_k,
                     "document_filter_count": len(selected_document_ids),
+                    "query_rewrite_enabled": query_rewrite_enabled,
                 },
             )
             return SearchResponse.model_validate(cached)
 
+        initial_attempt = self._execute_search_attempt(
+            stage="initial",
+            search_query=normalized_query,
+            top_k=effective_top_k,
+            document_ids=selected_document_ids,
+        )
+        attempts = [initial_attempt]
+        rewrite_meta = self._build_default_query_rewrite_meta(normalized_query)
+
+        if self.query_rewrite_service.is_enabled():
+            try:
+                rewrite_meta, expanded_attempts = self._run_query_rewrite_pipeline(
+                    original_query=normalized_query,
+                    initial_attempt=initial_attempt,
+                    top_k=effective_top_k,
+                    document_ids=selected_document_ids,
+                )
+                attempts.extend(expanded_attempts)
+            except Exception as exc:
+                logger.warning(
+                    "Query rewrite pipeline failed; returning initial retrieval results",
+                    extra={
+                        "event": "vector_query_rewrite_failed",
+                        "query_length": len(normalized_query),
+                        "top_k": effective_top_k,
+                        "document_filter_count": len(selected_document_ids),
+                        "error": str(exc),
+                    },
+                )
+                rewrite_meta["query_rewrite_error"] = str(exc)
+                rewrite_meta["query_rewrite_skipped_reason"] = "rewrite_pipeline_failed"
+        elif self.settings.query_rewrite_enabled:
+            rewrite_meta["query_rewrite_skipped_reason"] = "query_rewrite_not_configured"
+
+        final_items = (
+            self._merge_search_attempts(attempts, effective_top_k)
+            if len(attempts) > 1
+            else initial_attempt.items
+        )
+        response = self._build_search_response(
+            items=final_items,
+            meta=self._build_search_meta(
+                original_query=normalized_query,
+                attempts=attempts,
+                rewrite_meta=rewrite_meta,
+                top_k=effective_top_k,
+            ),
+        )
+        self.chunk_store.set_cached_search(cache_payload, response.model_dump())
+        logger.info(
+            "Search completed",
+            extra={
+                "event": "vector_search_completed",
+                "query_length": len(normalized_query),
+                "top_k": effective_top_k,
+                "document_filter_count": len(selected_document_ids),
+                "result_count": len(response.items),
+                "retrieval_mode": response.meta.get("retrieval_mode"),
+                "query_rewrite_applied": response.meta.get("query_rewrite_applied"),
+                "query_rewrite_strategy": response.meta.get("query_rewrite_strategy"),
+            },
+        )
+        return response
+
+    def _run_query_rewrite_pipeline(
+        self,
+        original_query: str,
+        initial_attempt: SearchAttempt,
+        top_k: int,
+        document_ids: list[str],
+    ) -> tuple[dict[str, Any], list[SearchAttempt]]:
+        rewrite_meta = self._build_default_query_rewrite_meta(original_query)
+        grade = self.query_rewrite_service.grade_retrieval(
+            original_query,
+            initial_attempt.items,
+        )
+        rewrite_meta["relevance_grade_score"] = grade.binary_score
+        rewrite_meta["relevance_grade_reason"] = grade.reason
+        rewrite_meta["rewrite_needed"] = grade.rewrite_needed
+
+        if not grade.rewrite_needed:
+            rewrite_meta["query_rewrite_skipped_reason"] = "relevance_grade_passed"
+            return rewrite_meta, []
+
+        plan = self.query_rewrite_service.plan_rewrite(
+            original_query,
+            initial_attempt.items,
+        )
+        expanded_queries = plan.expanded_queries()
+        rewrite_meta.update(
+            {
+                "query_rewrite_strategy": plan.strategy,
+                "query_rewrite_reason": plan.reason,
+                "step_back_question": plan.step_back_question,
+                "expanded_queries": [query for _, query in expanded_queries],
+                "primary_expanded_query": expanded_queries[0][1]
+                if expanded_queries
+                else None,
+                "hypothetical_answer": plan.hypothetical_answer,
+            }
+        )
+        if not expanded_queries:
+            rewrite_meta["query_rewrite_skipped_reason"] = "planner_returned_no_query"
+            return rewrite_meta, []
+
+        expanded_attempts = [
+            self._execute_search_attempt(
+                stage=stage,
+                search_query=expanded_query,
+                top_k=top_k,
+                document_ids=document_ids,
+            )
+            for stage, expanded_query in expanded_queries
+        ]
+        rewrite_meta["query_rewrite_applied"] = any(
+            attempt.items for attempt in expanded_attempts
+        )
+        rewrite_meta["query_rewrite_stage"] = (
+            "expanded" if rewrite_meta["query_rewrite_applied"] else "initial"
+        )
+        if not rewrite_meta["query_rewrite_applied"]:
+            rewrite_meta["query_rewrite_skipped_reason"] = (
+                "expanded_retrieval_returned_no_results"
+            )
+
+        return rewrite_meta, expanded_attempts
+
+    def _execute_search_attempt(
+        self,
+        stage: str,
+        search_query: str,
+        top_k: int,
+        document_ids: list[str],
+    ) -> SearchAttempt:
         corpus_stats = self.chunk_store.get_bm25_stats()
         if corpus_stats is None:
             corpus_stats = self._build_and_cache_bm25_stats()
 
-        dense_embedding = self.dense_embedding_service.embed_text(normalized_query)
+        dense_embedding = self.dense_embedding_service.embed_text(search_query)
         sparse_embedding = self.sparse_embedding_service.sparse_embed_text(
-            normalized_query,
+            search_query,
             corpus_stats,
         )
+        candidate_k = max(top_k * 3, top_k)
         try:
             retrieved, retrieval_mode = self.milvus.search(
                 dense_embedding=dense_embedding,
                 sparse_embedding=sparse_embedding,
-                top_k=max(effective_top_k * 3, effective_top_k),
-                document_ids=selected_document_ids,
+                top_k=candidate_k,
+                document_ids=document_ids,
             )
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"Vector search is unavailable: {exc}",
             ) from exc
-        merged, merge_meta = self._auto_merge_documents(retrieved, effective_top_k)
-        response = SearchResponse(
+
+        merged, merge_meta = self._auto_merge_documents(retrieved, top_k)
+        return SearchAttempt(
+            stage=stage,
+            query=search_query,
+            items=merged,
+            meta={
+                "retrieval_mode": retrieval_mode,
+                "candidate_k": candidate_k,
+                **merge_meta,
+            },
+        )
+
+    def _build_default_query_rewrite_meta(
+        self,
+        original_query: str,
+    ) -> dict[str, Any]:
+        return {
+            "query_rewrite_enabled": self.settings.query_rewrite_enabled,
+            "query_rewrite_configured": self.query_rewrite_service.is_configured(),
+            "query_rewrite_applied": False,
+            "query_rewrite_stage": "initial",
+            "query_rewrite_strategy": None,
+            "query_rewrite_reason": None,
+            "query_rewrite_error": None,
+            "query_rewrite_skipped_reason": None,
+            "relevance_grade_score": "skipped",
+            "relevance_grade_reason": None,
+            "rewrite_needed": False,
+            "original_query": original_query,
+            "final_query": original_query,
+            "expanded_queries": [],
+            "primary_expanded_query": None,
+            "step_back_question": "",
+            "hypothetical_answer": "",
+        }
+
+    def _build_search_meta(
+        self,
+        original_query: str,
+        attempts: list[SearchAttempt],
+        rewrite_meta: dict[str, Any],
+        top_k: int,
+    ) -> dict[str, Any]:
+        initial_attempt = attempts[0]
+        combined_meta = {
+            **initial_attempt.meta,
+            **rewrite_meta,
+            "original_query": original_query,
+            "final_query": rewrite_meta.get("primary_expanded_query")
+            or original_query,
+            "initial_result_count": len(initial_attempt.items),
+            "expanded_result_count": sum(len(attempt.items) for attempt in attempts[1:]),
+            "final_result_count": min(
+                top_k,
+                len(self._merge_search_attempts(attempts, top_k))
+                if len(attempts) > 1
+                else len(initial_attempt.items),
+            ),
+            "search_attempts": [
+                {
+                    "stage": attempt.stage,
+                    "query": attempt.query,
+                    "result_count": len(attempt.items),
+                    "retrieval_mode": attempt.meta.get("retrieval_mode"),
+                    "candidate_k": attempt.meta.get("candidate_k"),
+                    "auto_merge_applied": attempt.meta.get("auto_merge_applied"),
+                    "auto_merge_replaced_chunks": attempt.meta.get(
+                        "auto_merge_replaced_chunks"
+                    ),
+                }
+                for attempt in attempts
+            ],
+        }
+        if len(attempts) == 1:
+            return combined_meta
+
+        combined_meta.update(
+            {
+                "retrieval_mode": "multi_stage",
+                "candidate_k": max(
+                    int(attempt.meta.get("candidate_k", top_k)) for attempt in attempts
+                ),
+                "initial_retrieval_mode": initial_attempt.meta.get("retrieval_mode"),
+                "expanded_retrieval_modes": [
+                    attempt.meta.get("retrieval_mode") for attempt in attempts[1:]
+                ],
+                "auto_merge_enabled": True,
+                "auto_merge_applied": any(
+                    bool(attempt.meta.get("auto_merge_applied")) for attempt in attempts
+                ),
+                "auto_merge_replaced_chunks": sum(
+                    int(attempt.meta.get("auto_merge_replaced_chunks") or 0)
+                    for attempt in attempts
+                ),
+                "auto_merge_steps": sum(
+                    int(attempt.meta.get("auto_merge_steps") or 0)
+                    for attempt in attempts
+                ),
+                "auto_merge_threshold": self.settings.vector_auto_merge_threshold,
+            }
+        )
+        return combined_meta
+
+    def _merge_search_attempts(
+        self,
+        attempts: Sequence[SearchAttempt],
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        merged_map: dict[str, dict[str, Any]] = {}
+
+        for attempt in attempts:
+            for rank, item in enumerate(attempt.items, start=1):
+                chunk_id = item["chunk_id"]
+                existing = merged_map.get(chunk_id)
+
+                if existing is None:
+                    merged_item = dict(item)
+                    metadata = dict(merged_item.get("metadata", {}))
+                    metadata["matched_stages"] = [attempt.stage]
+                    metadata["matched_queries"] = [attempt.query]
+                    metadata["stage_ranks"] = {attempt.stage: rank}
+                    metadata["matched_stage_count"] = 1
+                    merged_item["metadata"] = metadata
+                    merged_item["_stage_hit_count"] = 1
+                    merged_map[chunk_id] = merged_item
+                    continue
+
+                metadata = dict(existing.get("metadata", {}))
+                matched_stages = list(metadata.get("matched_stages", []))
+                matched_queries = list(metadata.get("matched_queries", []))
+                stage_ranks = dict(metadata.get("stage_ranks", {}))
+
+                if attempt.stage not in matched_stages:
+                    matched_stages.append(attempt.stage)
+                if attempt.query not in matched_queries:
+                    matched_queries.append(attempt.query)
+                stage_ranks[attempt.stage] = rank
+
+                metadata["matched_stages"] = matched_stages
+                metadata["matched_queries"] = matched_queries
+                metadata["stage_ranks"] = stage_ranks
+                metadata["matched_stage_count"] = len(matched_stages)
+                existing["metadata"] = metadata
+                existing["_stage_hit_count"] = len(matched_stages)
+                existing["score"] = max(
+                    float(existing.get("score", 0.0)),
+                    float(item.get("score", 0.0)),
+                )
+
+        merged_items = list(merged_map.values())
+        merged_items.sort(
+            key=lambda item: (
+                int(item.get("_stage_hit_count", 1)),
+                float(item.get("score", 0.0)),
+            ),
+            reverse=True,
+        )
+        for item in merged_items:
+            item.pop("_stage_hit_count", None)
+
+        return merged_items[:top_k]
+
+    def _build_search_response(
+        self,
+        items: Sequence[dict[str, Any]],
+        meta: dict[str, Any],
+    ) -> SearchResponse:
+        return SearchResponse(
             items=[
                 SearchResultItem(
                     chunk_id=item["chunk_id"],
@@ -284,27 +601,10 @@ class DocumentVectorService:
                     score=float(item.get("score", 0.0)),
                     metadata=item.get("metadata", {}),
                 )
-                for item in merged
+                for item in items
             ],
-            meta={
-                "retrieval_mode": retrieval_mode,
-                "candidate_k": max(effective_top_k * 3, effective_top_k),
-                **merge_meta,
-            },
+            meta=meta,
         )
-        self.chunk_store.set_cached_search(cache_payload, response.model_dump())
-        logger.info(
-            "Search completed",
-            extra={
-                "event": "vector_search_completed",
-                "query_length": len(normalized_query),
-                "top_k": effective_top_k,
-                "document_filter_count": len(selected_document_ids),
-                "result_count": len(response.items),
-                "retrieval_mode": retrieval_mode,
-            },
-        )
-        return response
 
     def _auto_merge_documents(
         self,

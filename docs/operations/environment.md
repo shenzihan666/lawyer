@@ -108,6 +108,41 @@ Legacy alias:
 - Purpose: timeout for the external embedding request
 - Default: `30`
 
+### `QUERY_REWRITE_ENABLED`
+
+- Purpose: enable relevance grading and second-stage retrieval on top of vector search
+- Default: `true`
+
+### `QUERY_REWRITE_BASE_URL`
+
+- Purpose: OpenAI-compatible chat completion base URL used for query rewriting
+- Fallbacks: `LLM_BASE_URL`, `BASE_URL`, `EMBEDDING_BASE_URL`
+
+### `QUERY_REWRITE_MODEL`
+
+- Purpose: chat model used for relevance grading, step-back rewrite, and HyDE generation
+- Fallbacks: `QUERY_MODEL`, `MODEL`
+
+### `QUERY_REWRITE_API_KEY`
+
+- Purpose: bearer token for the query rewrite model
+- Fallbacks: `LLM_API_KEY`, `ARK_API_KEY`, `EMBEDDING_API_KEY`
+
+### `QUERY_REWRITE_TIMEOUT_SECONDS`
+
+- Purpose: timeout for the query rewrite API request
+- Default: `30`
+
+### `QUERY_REWRITE_MAX_CONTEXT_ITEMS`
+
+- Purpose: number of first-pass retrieved chunks sent to the rewrite/grading model
+- Default: `3`
+
+### `QUERY_REWRITE_MAX_CONTENT_CHARS`
+
+- Purpose: max characters kept per retrieved chunk when building rewrite context
+- Default: `480`
+
 ### `REDIS_URL`
 
 - Purpose: Redis cache connection for chunk/search caching
@@ -149,5 +184,6 @@ export NUXT_PUBLIC_API_BASE="http://127.0.0.1:8000/api/v1"
 - file logs rotate daily and retain the most recent `LOG_RETENTION_DAYS` archives
 - local development can run without PostgreSQL or Milvus
 - local vector search needs PostgreSQL, Redis, and Milvus available together
+- second-stage retrieval needs a chat-capable model configured through `QUERY_REWRITE_*` or compatible fallback variables
 - production should run PostgreSQL for metadata and chunk storage
 - Redis should be treated as a cache layer, not the source of truth

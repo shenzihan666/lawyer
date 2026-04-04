@@ -27,3 +27,31 @@ def test_embedding_settings_keep_legacy_env_aliases(
     assert settings.embedding_base_url == "https://legacy.example/v1"
     assert settings.embedding_model == "legacy-embedding-model"
     assert settings.embedding_api_key == "legacy-secret"
+
+
+def test_query_rewrite_settings_support_explicit_env_names(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("QUERY_REWRITE_BASE_URL", "https://llm.example/v1")
+    monkeypatch.setenv("QUERY_REWRITE_MODEL", "gpt-test")
+    monkeypatch.setenv("QUERY_REWRITE_API_KEY", "rewrite-secret")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.query_rewrite_base_url == "https://llm.example/v1"
+    assert settings.query_rewrite_model == "gpt-test"
+    assert settings.query_rewrite_api_key == "rewrite-secret"
+
+
+def test_query_rewrite_settings_keep_legacy_env_aliases(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("BASE_URL", "https://legacy.example/v1")
+    monkeypatch.setenv("MODEL", "legacy-chat-model")
+    monkeypatch.setenv("ARK_API_KEY", "legacy-secret")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.query_rewrite_base_url == "https://legacy.example/v1"
+    assert settings.query_rewrite_model == "legacy-chat-model"
+    assert settings.query_rewrite_api_key == "legacy-secret"

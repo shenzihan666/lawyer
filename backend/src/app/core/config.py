@@ -50,6 +50,32 @@ class Settings(BaseSettings):
     )
     embedding_batch_size: int = 100
     embedding_timeout_seconds: int = 30
+    query_rewrite_enabled: bool = True
+    query_rewrite_base_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "QUERY_REWRITE_BASE_URL",
+            "LLM_BASE_URL",
+            "BASE_URL",
+            "EMBEDDING_BASE_URL",
+        ),
+    )
+    query_rewrite_model: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("QUERY_REWRITE_MODEL", "QUERY_MODEL", "MODEL"),
+    )
+    query_rewrite_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "QUERY_REWRITE_API_KEY",
+            "LLM_API_KEY",
+            "ARK_API_KEY",
+            "EMBEDDING_API_KEY",
+        ),
+    )
+    query_rewrite_timeout_seconds: int = 30
+    query_rewrite_max_context_items: int = 3
+    query_rewrite_max_content_chars: int = 480
     vector_dense_dimension: int = 3072
     vector_sparse_dimension: int = 262144
     vector_leaf_chunk_size: int = 900

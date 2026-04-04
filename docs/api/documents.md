@@ -65,6 +65,7 @@ Behavior:
 - executes hybrid retrieval in Milvus using external dense embeddings plus local sparse vectors
 - can filter by selected document IDs
 - auto-merges child hits to parent chunks when enough siblings are recalled
+- when query rewrite is configured, performs relevance grading on the first-pass results and can trigger second-stage retrieval with step-back or HyDE expansion
 - serves hot results through Redis cache when available
 
 ### `POST /api/v1/documents/delete`
