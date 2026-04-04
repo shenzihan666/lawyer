@@ -164,18 +164,45 @@ function formatTrace(trace: Record<string, unknown> | null) {
   return trace ? JSON.stringify(trace, null, 2) : "";
 }
 
-const expandedCitations = ref<Set<string>>(new Set());
+const expandedCitationSections = ref<Set<string>>(new Set());
+const expandedStepSections = ref<Set<string>>(new Set());
+const expandedIndividualCitations = ref<Set<string>>(new Set());
 
-function toggleCitations(messageId: string) {
-  if (expandedCitations.value.has(messageId)) {
-    expandedCitations.value.delete(messageId);
+function toggleCitationSection(messageId: string) {
+  if (expandedCitationSections.value.has(messageId)) {
+    expandedCitationSections.value.delete(messageId);
   } else {
-    expandedCitations.value.add(messageId);
+    expandedCitationSections.value.add(messageId);
   }
 }
 
-function isCitationExpanded(messageId: string) {
-  return expandedCitations.value.has(messageId);
+function isCitationSectionExpanded(messageId: string) {
+  return expandedCitationSections.value.has(messageId);
+}
+
+function toggleStepSection(messageId: string) {
+  if (expandedStepSections.value.has(messageId)) {
+    expandedStepSections.value.delete(messageId);
+  } else {
+    expandedStepSections.value.add(messageId);
+  }
+}
+
+function isStepSectionExpanded(messageId: string) {
+  return expandedStepSections.value.has(messageId);
+}
+
+function toggleIndividualCitation(messageId: string, chunkId: string) {
+  const key = `${messageId}:${chunkId}`;
+  if (expandedIndividualCitations.value.has(key)) {
+    expandedIndividualCitations.value.delete(key);
+  } else {
+    expandedIndividualCitations.value.add(key);
+  }
+}
+
+function isIndividualCitationExpanded(messageId: string, chunkId: string) {
+  return expandedIndividualCitations.value.has(`${messageId}:${chunkId}`);
 }
 
 watch(
@@ -459,23 +486,40 @@ onMounted(() => {
                       <span>正在准备检索与生成流程</span>
                     </div>
 
-                    <div v-if="message.steps.length" class="step-list">
-                      <div
-                        v-for="(step, index) in message.steps"
-                        :key="`${message.id}-${index}-${step.key}`"
-                        class="step-item"
-                        :class="{
-                          'step-item--active':
-                            message.isStreaming && index === message.steps.length - 1,
-                          'step-item--error': step.status === 'error',
-                        }"
+                    <div v-if="message.steps.length" class="step-section">
+                      <button
+                        class="step-toggle"
+                        @click="toggleStepSection(message.id)"
                       >
-                        <span class="step-index">{{ index + 1 }}</span>
-                        <div class="min-w-0">
-                          <p class="step-label">{{ step.label }}</p>
-                          <p v-if="step.detail" class="step-detail">
-                            {{ step.detail }}
-                          </p>
+                        <UIcon
+                          :name="isStepSectionExpanded(message.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                          class="step-toggle__icon"
+                        />
+                        <span>检索过程</span>
+                        <span class="step-toggle__count">{{ message.steps.length }} 步</span>
+                      </button>
+
+                      <div
+                        v-show="isStepSectionExpanded(message.id)"
+                        class="step-list"
+                      >
+                        <div
+                          v-for="(step, index) in message.steps"
+                          :key="`${message.id}-${index}-${step.key}`"
+                          class="step-item"
+                          :class="{
+                            'step-item--active':
+                              message.isStreaming && index === message.steps.length - 1,
+                            'step-item--error': step.status === 'error',
+                          }"
+                        >
+                          <span class="step-index">{{ index + 1 }}</span>
+                          <div class="min-w-0">
+                            <p class="step-label">{{ step.label }}</p>
+                            <p v-if="step.detail" class="step-detail">
+                              {{ step.detail }}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -506,17 +550,17 @@ onMounted(() => {
                     >
                       <button
                         class="citation-toggle"
-                        @click="toggleCitations(message.id)"
+                        @click="toggleCitationSection(message.id)"
                       >
                         <UIcon
-                          :name="isCitationExpanded(message.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                          :name="isCitationSectionExpanded(message.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
                           class="citation-toggle__icon"
                         />
                         <span>{{ message.citations.length }} 条引用</span>
                       </button>
 
                       <div
-                        v-show="isCitationExpanded(message.id)"
+                        v-show="isCitationSectionExpanded(message.id)"
                         class="citation-list"
                       >
                         <article
@@ -524,8 +568,11 @@ onMounted(() => {
                           :key="citation.chunk_id"
                           class="citation-card"
                         >
-                          <div class="citation-card__header">
-                            <div class="min-w-0">
+                          <button
+                            class="citation-card__toggle"
+                            @click="toggleIndividualCitation(message.id, citation.chunk_id)"
+                          >
+                            <div class="min-w-0 flex-1">
                               <div class="flex flex-wrap items-center gap-2">
                                 <UBadge color="primary" variant="subtle" size="xs">
                                   [{{ citation.citation_number }}]
@@ -548,12 +595,23 @@ onMounted(() => {
                               </div>
                             </div>
 
-                            <span class="citation-chip mono">
-                              {{ citation.chunk_id }}
-                            </span>
-                          </div>
+                            <div class="flex items-center gap-2">
+                              <span class="citation-chip mono">
+                                {{ citation.chunk_id }}
+                              </span>
+                              <UIcon
+                                :name="isIndividualCitationExpanded(message.id, citation.chunk_id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                                class="citation-card__expand-icon"
+                              />
+                            </div>
+                          </button>
 
-                          <p class="citation-snippet">{{ citation.snippet }}</p>
+                          <div
+                            v-show="isIndividualCitationExpanded(message.id, citation.chunk_id)"
+                            class="citation-snippet-wrapper"
+                          >
+                            <p class="citation-snippet">{{ citation.snippet }}</p>
+                          </div>
                         </article>
                       </div>
                     </div>
@@ -988,8 +1046,44 @@ onMounted(() => {
   animation-delay: -0.16s;
 }
 
-.step-list {
+.step-section {
   margin-bottom: 14px;
+}
+
+.step-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  padding: 6px 10px;
+  border-radius: 12px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #71717a;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.step-toggle:hover {
+  background: #f4f2ee;
+  color: #3f3f46;
+}
+
+.step-toggle__icon {
+  height: 16px;
+  width: 16px;
+  transition: transform 0.2s;
+}
+
+.step-toggle__count {
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: #a1a1aa;
+}
+
+.step-list {
+  margin-top: 10px;
   display: grid;
   gap: 10px;
 }
@@ -1098,20 +1192,6 @@ onMounted(() => {
   gap: 12px;
 }
 
-.citation-card {
-  border-radius: 20px;
-  border: 1px solid #ece6dc;
-  background: #fcfbf8;
-  padding: 14px 15px;
-}
-
-.citation-card__header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .citation-card__title {
   max-width: 100%;
   overflow: hidden;
@@ -1144,8 +1224,47 @@ onMounted(() => {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
+.citation-card {
+  border-radius: 20px;
+  border: 1px solid #ece6dc;
+  background: #fcfbf8;
+  padding: 0;
+  overflow: hidden;
+}
+
+.citation-card__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 14px 15px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.citation-card__toggle:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.citation-card__expand-icon {
+  height: 16px;
+  width: 16px;
+  color: #a1a1aa;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+.citation-snippet-wrapper {
+  border-top: 1px solid #ece6dc;
+  background: rgba(255, 255, 255, 0.6);
+}
+
 .citation-snippet {
-  margin-top: 12px;
+  padding: 14px 15px;
   white-space: pre-wrap;
   font-size: 0.9rem;
   line-height: 1.8;
