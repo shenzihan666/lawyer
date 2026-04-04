@@ -116,6 +116,26 @@ class Settings(BaseSettings):
     answer_generation_timeout_seconds: int = 45
     answer_generation_max_context_items: int = 5
     answer_generation_max_content_chars: int = 700
+    rerank_enabled: bool = True
+    rerank_base_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("RERANK_BASE_URL", "RERANK_BINDING_HOST"),
+    )
+    rerank_model: str | None = Field(default=None, validation_alias="RERANK_MODEL")
+    rerank_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "RERANK_API_KEY",
+            "ANSWER_GENERATION_API_KEY",
+            "QUERY_REWRITE_API_KEY",
+            "LLM_API_KEY",
+            "ARK_API_KEY",
+        ),
+    )
+    rerank_timeout_seconds: int = 20
+    rerank_max_candidates: int = 12
+    rerank_max_content_chars: int = 360
+    rerank_llm_fallback_enabled: bool = True
     vector_dense_dimension: int = 3072
     vector_sparse_dimension: int = 262144
     vector_leaf_chunk_size: int = 900

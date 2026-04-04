@@ -178,6 +178,23 @@ onMounted(() => {
                   {{ String(meta.retrieval_mode) }}
                 </UBadge>
                 <UBadge
+                  v-if="meta.rerank_applied"
+                  color="success"
+                  variant="subtle"
+                >
+                  rerank
+                  <span v-if="meta.rerank_provider">
+                    / {{ String(meta.rerank_provider) }}
+                  </span>
+                </UBadge>
+                <UBadge
+                  v-else-if="meta.rerank_enabled"
+                  color="neutral"
+                  variant="subtle"
+                >
+                  rerank skipped
+                </UBadge>
+                <UBadge
                   v-if="meta.auto_merge_applied"
                   color="warning"
                   variant="subtle"

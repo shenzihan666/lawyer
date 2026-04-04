@@ -83,3 +83,31 @@ def test_answer_generation_settings_reuse_fallback_aliases(
     assert settings.answer_generation_base_url == "https://rewrite.example/v1"
     assert settings.answer_generation_model == "rewrite-model"
     assert settings.answer_generation_api_key == "rewrite-secret"
+
+
+def test_rerank_settings_support_explicit_env_names(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("RERANK_BASE_URL", "https://rerank.example")
+    monkeypatch.setenv("RERANK_MODEL", "rerank-v1")
+    monkeypatch.setenv("RERANK_API_KEY", "rerank-secret")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.rerank_base_url == "https://rerank.example"
+    assert settings.rerank_model == "rerank-v1"
+    assert settings.rerank_api_key == "rerank-secret"
+
+
+def test_rerank_settings_support_binding_host_and_api_key_fallback(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("RERANK_BINDING_HOST", "https://rerank.example")
+    monkeypatch.setenv("RERANK_MODEL", "rerank-v1")
+    monkeypatch.setenv("ARK_API_KEY", "legacy-secret")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.rerank_base_url == "https://rerank.example"
+    assert settings.rerank_model == "rerank-v1"
+    assert settings.rerank_api_key == "legacy-secret"

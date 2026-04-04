@@ -20,6 +20,7 @@ from app.services.vectors.embeddings import (
 )
 from app.services.vectors.milvus import MilvusVectorIndex
 from app.services.vectors.query_rewrite import QueryRewriteService
+from app.services.vectors.rerank import DocumentRerankService
 from app.services.vectors.store import DocumentChunkStore
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ class DocumentVectorService:
         self.dense_embedding_service = ExternalEmbeddingService(settings)
         self.sparse_embedding_service = BM25SparseEmbeddingService(settings)
         self.query_rewrite_service = QueryRewriteService(settings)
+        self.rerank_service = DocumentRerankService(settings)
         self.milvus = MilvusVectorIndex(settings)
 
     def index_documents(self, document_ids: Sequence[str]) -> list[str]:
@@ -247,6 +249,11 @@ class DocumentVectorService:
             "document_ids": selected_document_ids,
             "query_rewrite_enabled": query_rewrite_enabled,
             "query_rewrite_model": self.settings.query_rewrite_model or "",
+            "rerank_enabled": self.rerank_service.is_enabled(),
+            "rerank_model": self.settings.rerank_model
+            or self.settings.answer_generation_model
+            or self.settings.query_rewrite_model
+            or "",
         }
         cached = self.chunk_store.get_cached_search(cache_payload)
         if cached is not None:
@@ -258,6 +265,7 @@ class DocumentVectorService:
                     "top_k": effective_top_k,
                     "document_filter_count": len(selected_document_ids),
                     "query_rewrite_enabled": query_rewrite_enabled,
+                    "rerank_enabled": self.rerank_service.is_enabled(),
                 },
             )
             return SearchResponse.model_validate(cached)
@@ -322,6 +330,8 @@ class DocumentVectorService:
                 "retrieval_mode": response.meta.get("retrieval_mode"),
                 "query_rewrite_applied": response.meta.get("query_rewrite_applied"),
                 "query_rewrite_strategy": response.meta.get("query_rewrite_strategy"),
+                "rerank_applied": response.meta.get("rerank_applied"),
+                "rerank_provider": response.meta.get("rerank_provider"),
             },
         )
         return response
@@ -419,7 +429,12 @@ class DocumentVectorService:
                 detail=f"Vector search is unavailable: {exc}",
             ) from exc
 
-        merged, merge_meta = self._auto_merge_documents(retrieved, top_k)
+        reranked, rerank_meta = self.rerank_service.rerank(
+            query=search_query,
+            docs=retrieved,
+            top_k=top_k,
+        )
+        merged, merge_meta = self._auto_merge_documents(reranked, top_k)
         return SearchAttempt(
             stage=stage,
             query=search_query,
@@ -427,6 +442,7 @@ class DocumentVectorService:
             meta={
                 "retrieval_mode": retrieval_mode,
                 "candidate_k": candidate_k,
+                **rerank_meta,
                 **merge_meta,
             },
         )
@@ -484,6 +500,16 @@ class DocumentVectorService:
                     "result_count": len(attempt.items),
                     "retrieval_mode": attempt.meta.get("retrieval_mode"),
                     "candidate_k": attempt.meta.get("candidate_k"),
+                    "rerank_applied": attempt.meta.get("rerank_applied"),
+                    "rerank_provider": attempt.meta.get("rerank_provider"),
+                    "rerank_model": attempt.meta.get("rerank_model"),
+                    "rerank_candidate_count": attempt.meta.get(
+                        "rerank_candidate_count"
+                    ),
+                    "rerank_error": attempt.meta.get("rerank_error"),
+                    "rerank_skipped_reason": attempt.meta.get(
+                        "rerank_skipped_reason"
+                    ),
                     "auto_merge_applied": attempt.meta.get("auto_merge_applied"),
                     "auto_merge_replaced_chunks": attempt.meta.get(
                         "auto_merge_replaced_chunks"
@@ -505,6 +531,59 @@ class DocumentVectorService:
                 "expanded_retrieval_modes": [
                     attempt.meta.get("retrieval_mode") for attempt in attempts[1:]
                 ],
+                "rerank_enabled": any(
+                    bool(attempt.meta.get("rerank_enabled")) for attempt in attempts
+                ),
+                "rerank_configured": any(
+                    bool(attempt.meta.get("rerank_configured")) for attempt in attempts
+                ),
+                "rerank_applied": any(
+                    bool(attempt.meta.get("rerank_applied")) for attempt in attempts
+                ),
+                "rerank_provider": next(
+                    (
+                        attempt.meta.get("rerank_provider")
+                        for attempt in attempts
+                        if attempt.meta.get("rerank_provider")
+                    ),
+                    None,
+                ),
+                "rerank_model": next(
+                    (
+                        attempt.meta.get("rerank_model")
+                        for attempt in attempts
+                        if attempt.meta.get("rerank_model")
+                    ),
+                    None,
+                ),
+                "rerank_endpoint": next(
+                    (
+                        attempt.meta.get("rerank_endpoint")
+                        for attempt in attempts
+                        if attempt.meta.get("rerank_endpoint")
+                    ),
+                    None,
+                ),
+                "rerank_error": "; ".join(
+                    [
+                        str(attempt.meta.get("rerank_error"))
+                        for attempt in attempts
+                        if attempt.meta.get("rerank_error")
+                    ]
+                )
+                or None,
+                "rerank_skipped_reason": next(
+                    (
+                        attempt.meta.get("rerank_skipped_reason")
+                        for attempt in attempts
+                        if attempt.meta.get("rerank_skipped_reason")
+                    ),
+                    None,
+                ),
+                "rerank_candidate_count": max(
+                    int(attempt.meta.get("rerank_candidate_count") or 0)
+                    for attempt in attempts
+                ),
                 "auto_merge_enabled": True,
                 "auto_merge_applied": any(
                     bool(attempt.meta.get("auto_merge_applied")) for attempt in attempts

@@ -143,6 +143,45 @@ Legacy alias:
 - Purpose: max characters kept per retrieved chunk when building rewrite context
 - Default: `480`
 
+### `RERANK_ENABLED`
+
+- Purpose: enable rerank after first-pass vector retrieval
+- Default: `true`
+
+### `RERANK_BASE_URL`
+
+- Purpose: dedicated rerank API base URL
+- Aliases: `RERANK_BINDING_HOST`
+
+### `RERANK_MODEL`
+
+- Purpose: rerank model name sent to the dedicated rerank endpoint
+
+### `RERANK_API_KEY`
+
+- Purpose: bearer token for rerank requests
+- Fallbacks: `ANSWER_GENERATION_API_KEY`, `QUERY_REWRITE_API_KEY`, `LLM_API_KEY`, `ARK_API_KEY`
+
+### `RERANK_TIMEOUT_SECONDS`
+
+- Purpose: timeout for rerank API or rerank LLM requests
+- Default: `20`
+
+### `RERANK_MAX_CANDIDATES`
+
+- Purpose: cap on how many retrieved chunks are forwarded into rerank
+- Default: `12`
+
+### `RERANK_MAX_CONTENT_CHARS`
+
+- Purpose: max characters kept per candidate chunk when building rerank input
+- Default: `360`
+
+### `RERANK_LLM_FALLBACK_ENABLED`
+
+- Purpose: allow rerank to reuse the configured answer/query-rewrite chat model when no dedicated rerank endpoint is configured
+- Default: `true`
+
 ### `ANSWER_GENERATION_ENABLED`
 
 - Purpose: enable grounded answer generation on top of retrieved evidence
@@ -219,6 +258,7 @@ export NUXT_PUBLIC_API_BASE="http://127.0.0.1:8000/api/v1"
 - file logs rotate daily and retain the most recent `LOG_RETENTION_DAYS` archives
 - local development can run without PostgreSQL or Milvus
 - local vector search needs PostgreSQL, Redis, and Milvus available together
+- rerank can use either a dedicated `/rerank` endpoint or the configured chat model as a fallback
 - second-stage retrieval needs a chat-capable model configured through `QUERY_REWRITE_*` or compatible fallback variables
 - grounded answer generation needs an answer model configured through `ANSWER_GENERATION_*` or compatible fallback variables
 - production should run PostgreSQL for metadata and chunk storage

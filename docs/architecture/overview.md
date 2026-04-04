@@ -31,6 +31,7 @@ Implemented now:
 - raw document extraction into structured fragments
 - hierarchical chunk persistence in PostgreSQL
 - Milvus-based hybrid retrieval with Redis cache support
+- post-retrieval rerank with dedicated endpoint or chat-model fallback
 - single-turn grounded answer generation with inline citations
 
 ## System Flow
