@@ -60,7 +60,7 @@ src/app/
 - upload orchestration
 - file storage
 - persistence write flow
-- vector queue status updates
+- vector indexing trigger and cleanup coordination
 - soft delete behavior
 
 ### `services/loaders/`
@@ -69,12 +69,21 @@ src/app/
 - loader-specific normalization rules
 - common fragment result format
 
+### `services/vectors/`
+
+- hierarchical chunk generation from normalized fragments
+- external dense embedding generation plus BM25-style sparse vector generation
+- Milvus collection lifecycle and hybrid search
+- PostgreSQL chunk store for parent-context recall
+- Redis-backed cache for search responses and chunk lookups
+
 ## Storage Model
 
 ### Relational metadata
 
 - document-level record in `document_assets`
 - fragment-level record in `document_fragments`
+- hierarchical retrieval chunks in `document_chunks`
 
 ### File storage
 
@@ -84,6 +93,6 @@ src/app/
 
 ## Production Direction
 
-- use `PostgreSQL` for metadata persistence
-- use `Milvus` for vector storage after embeddings are added
-- keep the current local SQLite fallback for bootstrap and testing only
+- use `PostgreSQL` for metadata persistence and chunk storage
+- use `Redis` for hot chunk and search cache
+- use `Milvus` for leaf-chunk vector storage and retrieval

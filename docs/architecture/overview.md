@@ -17,7 +17,6 @@ This project is a two-application monorepo:
 - ORM: `SQLAlchemy`
 - Config management: `pydantic-settings`
 - Production metadata store target: `PostgreSQL`
-- Local bootstrap metadata store: `SQLite`
 - Vector store target: `Milvus`
 
 ## Current Product Scope
@@ -27,14 +26,14 @@ Implemented now:
 - single and batch document upload
 - document list view
 - single and batch soft delete
-- single and batch vectorization queue marking
+- single and batch document vectorization
 - traceable file storage under `backend/uploads/`
 - raw document extraction into structured fragments
+- hierarchical chunk persistence in PostgreSQL
+- Milvus-based hybrid retrieval with Redis cache support
 
 Reserved for later:
 
-- actual vector embedding generation
-- Milvus collection writes
 - retrieval and answer generation pipeline
 
 ## System Flow
@@ -45,8 +44,10 @@ Frontend upload UI
     -> upload storage writes source file
     -> loader registry selects loader by extension
     -> extracted raw fragments stored in relational DB
+    -> vectorization expands fragments into retrieval chunks
+    -> parent/root chunks stored in PostgreSQL and cached in Redis
+    -> leaf chunks embedded through external API and written to Milvus
     -> document status returned to frontend
-    -> optional vectorization queue status set for later Milvus integration
 ```
 
 ## Design Principles

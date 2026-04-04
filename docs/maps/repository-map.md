@@ -6,6 +6,7 @@
 lawyer/
 |- AGENTS.md
 |- docs/
+|- docker-compose.yml
 |- frontend/
 |- backend/
 |- scripts/
@@ -18,6 +19,7 @@ lawyer/
 - `docs/`: project knowledge map and agent navigation entrypoint
 - `frontend/`: Nuxt frontend for document upload and list management UI
 - `backend/`: FastAPI backend for ingestion, metadata persistence, and loader orchestration
+- `docker-compose.yml`: local PostgreSQL, Redis, and Milvus stack
 - `scripts/`: repository automation, including hook installation and helper scripts
 - `Resource/`: local sample/reference materials, not part of runtime ingestion flow
 
@@ -50,6 +52,8 @@ backend/
 - `src/app/schemas/document.py`: request/response contracts
 - `src/app/services/documents/`: document orchestration and upload storage
 - `src/app/services/loaders/`: file-type-specific loader registry and normalization rules
+- `src/app/services/vectors/`: chunking, embeddings, Milvus indexing, and retrieval
+- `src/app/services/cache/`: Redis cache adapter used by vector retrieval
 - `tests/`: API and health verification
 
 ## Frontend Map
@@ -80,6 +84,9 @@ frontend/
 - Change upload/list/delete/vectorization behavior:
   - `backend/src/app/services/documents/service.py`
   - `backend/src/app/api/routes/documents.py`
+- Change vector indexing or retrieval behavior:
+  - `backend/src/app/services/vectors/`
+  - `backend/src/app/api/routes/search.py`
 - Change metadata schema:
   - `backend/src/app/models/document.py`
   - `backend/src/app/schemas/document.py`

@@ -58,7 +58,11 @@ This structure is chosen so the original source file remains auditable and can b
 4. Run loader selected by extension.
 5. Normalize fragments.
 6. Persist fragments to relational DB.
-7. Return updated list and summary to frontend.
+7. On vectorization, expand fragments into hierarchical retrieval chunks.
+8. Store all chunk metadata in relational DB and cache hot entries in Redis.
+9. Rebuild BM25 corpus statistics from leaf chunks for sparse retrieval.
+10. Embed leaf chunks and write dense+sparse vectors to Milvus.
+11. Return updated list and summary to frontend.
 
 ## Vectorization Status
 
@@ -66,5 +70,8 @@ Current statuses:
 
 - `not_requested`
 - `queued`
+- `indexing`
+- `indexed`
+- `failed`
 
-Embeddings and Milvus writes are intentionally deferred to a later phase.
+Leaf chunks are written to Milvus, while parent/root chunks remain in PostgreSQL for later auto-merge style recall.

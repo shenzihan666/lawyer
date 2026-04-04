@@ -42,7 +42,30 @@ Request body:
 Behavior:
 
 - marks ready documents as `queued`
-- does not yet generate embeddings
+- generates hierarchical chunks from normalized fragments
+- writes chunk metadata to PostgreSQL
+- rebuilds BM25 corpus stats for sparse retrieval
+- writes leaf vectors to Milvus
+- updates document `vector_status` to `indexed` or `failed`
+
+### `POST /api/v1/search`
+
+Request body:
+
+```json
+{
+  "query": "违约责任怎么认定",
+  "top_k": 5,
+  "document_ids": ["uuid-1"]
+}
+```
+
+Behavior:
+
+- executes hybrid retrieval in Milvus using external dense embeddings plus local sparse vectors
+- can filter by selected document IDs
+- auto-merges child hits to parent chunks when enough siblings are recalled
+- serves hot results through Redis cache when available
 
 ### `POST /api/v1/documents/delete`
 
@@ -77,6 +100,8 @@ Most document endpoints return:
     "ready": 0,
     "failed": 0,
     "vector_queued": 0,
+    "vector_indexed": 0,
+    "vector_failed": 0,
     "deleted": 0
   },
   "affected_ids": []
