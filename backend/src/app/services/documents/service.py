@@ -22,6 +22,7 @@ from app.schemas.document import (
 from app.services.documents.storage import UploadStorage
 from app.services.loaders import registry
 from app.services.loaders.base import DocumentLoadError, UnsupportedDocumentTypeError
+from app.services.vectors import DocumentVectorService
 
 
 def utcnow() -> datetime:
@@ -33,6 +34,7 @@ class DocumentService:
         self.db = db
         self.settings = settings
         self.storage = UploadStorage(settings)
+        self.vector_service = DocumentVectorService(db=db, settings=settings)
 
     def list_documents(self) -> DocumentListResponse:
         documents = self._fetch_documents(include_deleted=True)
@@ -165,6 +167,7 @@ class DocumentService:
             affected_ids.append(document.id)
 
         self.db.commit()
+        indexed_ids = self.vector_service.index_documents(affected_ids)
         documents = self._fetch_documents(include_deleted=True)
         active_items = [
             self._to_item(document)
@@ -174,7 +177,7 @@ class DocumentService:
         return DocumentOperationResponse(
             items=active_items,
             summary=self._build_summary(documents),
-            affected_ids=affected_ids,
+            affected_ids=indexed_ids or affected_ids,
         )
 
     def soft_delete_documents(
@@ -194,6 +197,8 @@ class DocumentService:
             document.updated_at = utcnow()
             affected_ids.append(document.id)
 
+        self.db.commit()
+        self.vector_service.delete_document_vectors(affected_ids)
         self.db.commit()
         documents = self._fetch_documents(include_deleted=True)
         active_items = [
@@ -228,6 +233,14 @@ class DocumentService:
             ),
             vector_queued=sum(
                 document.vector_status == DocumentVectorStatus.queued.value
+                for document in active
+            ),
+            vector_indexed=sum(
+                document.vector_status == DocumentVectorStatus.indexed.value
+                for document in active
+            ),
+            vector_failed=sum(
+                document.vector_status == DocumentVectorStatus.failed.value
                 for document in active
             ),
             deleted=sum(document.deleted_at is not None for document in documents),

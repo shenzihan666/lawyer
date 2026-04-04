@@ -33,6 +33,8 @@ class DocumentSummary(BaseModel):
     ready: int = 0
     failed: int = 0
     vector_queued: int = 0
+    vector_indexed: int = 0
+    vector_failed: int = 0
     deleted: int = 0
 
 

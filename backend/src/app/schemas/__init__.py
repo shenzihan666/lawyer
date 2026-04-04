@@ -6,3 +6,8 @@ from .document import (
     DocumentSummary as DocumentSummary,
     VectorizeRequest as VectorizeRequest,
 )
+from .search import (
+    SearchRequest as SearchRequest,
+    SearchResponse as SearchResponse,
+    SearchResultItem as SearchResultItem,
+)
