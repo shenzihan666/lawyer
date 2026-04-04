@@ -164,6 +164,20 @@ function formatTrace(trace: Record<string, unknown> | null) {
   return trace ? JSON.stringify(trace, null, 2) : "";
 }
 
+const expandedCitations = ref<Set<string>>(new Set());
+
+function toggleCitations(messageId: string) {
+  if (expandedCitations.value.has(messageId)) {
+    expandedCitations.value.delete(messageId);
+  } else {
+    expandedCitations.value.add(messageId);
+  }
+}
+
+function isCitationExpanded(messageId: string) {
+  return expandedCitations.value.has(messageId);
+}
+
 watch(
   [messages, isResponding],
   async () => {
@@ -486,43 +500,62 @@ onMounted(() => {
                       }}
                     </div>
 
-                    <div v-if="message.citations.length" class="citation-list">
-                      <article
-                        v-for="citation in message.citations"
-                        :key="citation.chunk_id"
-                        class="citation-card"
+                    <div
+                      v-if="message.citations.length"
+                      class="citation-section"
+                    >
+                      <button
+                        class="citation-toggle"
+                        @click="toggleCitations(message.id)"
                       >
-                        <div class="citation-card__header">
-                          <div class="min-w-0">
-                            <div class="flex flex-wrap items-center gap-2">
-                              <UBadge color="primary" variant="subtle" size="xs">
-                                [{{ citation.citation_number }}]
-                              </UBadge>
-                              <p class="citation-card__title">
-                                {{ citation.original_filename }}
-                              </p>
+                        <UIcon
+                          :name="isCitationExpanded(message.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                          class="citation-toggle__icon"
+                        />
+                        <span>{{ message.citations.length }} 条引用</span>
+                      </button>
+
+                      <div
+                        v-show="isCitationExpanded(message.id)"
+                        class="citation-list"
+                      >
+                        <article
+                          v-for="citation in message.citations"
+                          :key="citation.chunk_id"
+                          class="citation-card"
+                        >
+                          <div class="citation-card__header">
+                            <div class="min-w-0">
+                              <div class="flex flex-wrap items-center gap-2">
+                                <UBadge color="primary" variant="subtle" size="xs">
+                                  [{{ citation.citation_number }}]
+                                </UBadge>
+                                <p class="citation-card__title">
+                                  {{ citation.original_filename }}
+                                </p>
+                              </div>
+
+                              <div class="citation-card__meta">
+                                <span class="citation-chip">
+                                  L{{ citation.chunk_level }} / #{{ citation.chunk_index }}
+                                </span>
+                                <span class="citation-chip">
+                                  第 {{ citation.page_number || 0 }} 页
+                                </span>
+                                <span class="citation-chip mono">
+                                  score {{ formatScore(citation.score) }}
+                                </span>
+                              </div>
                             </div>
 
-                            <div class="citation-card__meta">
-                              <span class="citation-chip">
-                                L{{ citation.chunk_level }} / #{{ citation.chunk_index }}
-                              </span>
-                              <span class="citation-chip">
-                                第 {{ citation.page_number || 0 }} 页
-                              </span>
-                              <span class="citation-chip mono">
-                                score {{ formatScore(citation.score) }}
-                              </span>
-                            </div>
+                            <span class="citation-chip mono">
+                              {{ citation.chunk_id }}
+                            </span>
                           </div>
 
-                          <span class="citation-chip mono">
-                            {{ citation.chunk_id }}
-                          </span>
-                        </div>
-
-                        <p class="citation-snippet">{{ citation.snippet }}</p>
-                      </article>
+                          <p class="citation-snippet">{{ citation.snippet }}</p>
+                        </article>
+                      </div>
                     </div>
 
                     <details
@@ -1029,8 +1062,38 @@ onMounted(() => {
   color: #b42318;
 }
 
-.citation-list {
+.citation-section {
   margin-top: 18px;
+}
+
+.citation-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  padding: 6px 10px;
+  border-radius: 12px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #71717a;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.citation-toggle:hover {
+  background: #f4f2ee;
+  color: #3f3f46;
+}
+
+.citation-toggle__icon {
+  height: 16px;
+  width: 16px;
+  transition: transform 0.2s;
+}
+
+.citation-list {
+  margin-top: 10px;
   display: grid;
   gap: 12px;
 }
