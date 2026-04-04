@@ -16,6 +16,7 @@
     "@iconify-json/heroicons": "^1.2.3",
     "@iconify-json/lucide": "^1.2.101",
     "prettier": "^3.6.2",
+    "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
     "vue-tsc": "^3.1.1"
   },

@@ -5,14 +5,18 @@ import { useDocumentStore } from "../../stores/documents";
 
 const chatStore = useChatStore();
 const documentStore = useDocumentStore();
+const toast = useToast();
+
+const composerRef = ref<HTMLTextAreaElement | null>(null);
+const feedRef = ref<HTMLElement | null>(null);
+const isComposing = ref(false);
 
 const { documents, isLoading: isLoadingDocuments } = storeToRefs(documentStore);
 const {
-  answer,
-  citations,
   hasAnswered,
   isResponding,
-  meta,
+  lastAssistantMessage,
+  messages,
   prompt,
   selectedDocumentIds,
   topK,
@@ -29,236 +33,1211 @@ const candidateOptions = computed(() =>
   })),
 );
 
+const selectedDocuments = computed(() =>
+  indexedDocuments.value.filter((item) => selectedDocumentIds.value.includes(item.id)),
+);
+
+const visibleIndexedDocuments = computed(() => indexedDocuments.value.slice(0, 5));
+
 const topKOptions = [3, 5, 8].map((value) => ({
   label: `${value} 条来源`,
   value,
 }));
 
-const citationCountLabel = computed(() => `${citations.value.length} 条引用`);
+const latestMeta = computed(() => lastAssistantMessage.value?.meta ?? {});
+const latestTrace = computed(() => lastAssistantMessage.value?.trace ?? null);
+const latestCitationCountLabel = computed(() => {
+  const count = lastAssistantMessage.value?.citations.length ?? 0;
+  return `${count} 条引用`;
+});
+const indexedCountLabel = computed(() => `${indexedDocuments.value.length} 份已索引`);
+const scopeLabel = computed(() =>
+  selectedDocuments.value.length
+    ? `限定 ${selectedDocuments.value.length} 份文档`
+    : "检索全部已索引文档",
+);
+
+const sideSummary = computed(() => {
+  if (!indexedDocuments.value.length) {
+    return "先到知识库页面上传并完成向量化，聊天页才会返回带引用的回答。";
+  }
+
+  if (selectedDocuments.value.length) {
+    return `当前回答将只参考选中的 ${selectedDocuments.value.length} 份文档。`;
+  }
+
+  return "当前会在全部已索引文档范围内检索答案证据。";
+});
+
+const headerStatusLabel = computed(() => {
+  if (isResponding.value) {
+    return "正在流式生成回答";
+  }
+
+  if (indexedDocuments.value.length) {
+    return "知识库已连接";
+  }
+
+  return "等待可用知识库";
+});
+
+const headerHint = computed(() => {
+  if (isResponding.value) {
+    return "系统会先展示检索步骤，再把回答内容按流式逐段写入会话。";
+  }
+
+  if (hasAnswered.value) {
+    return "每条回答都会保留过程步骤、引用卡片和检索元数据，方便人工核对。";
+  }
+
+  return "输入问题后，这里会按聊天流展示提问、检索步骤、回答文本和引用依据。";
+});
+
+const canSubmit = computed(
+  () =>
+    Boolean(prompt.value.trim()) &&
+    indexedDocuments.value.length > 0 &&
+    !isResponding.value,
+);
 
 function formatScore(score: number) {
   return score.toFixed(3);
 }
 
+function autoResizeComposer() {
+  const element = composerRef.value;
+  if (!element) return;
+
+  element.style.height = "0px";
+  element.style.height = `${Math.min(element.scrollHeight, 180)}px`;
+}
+
+function scrollFeedToBottom(behavior: ScrollBehavior = "smooth") {
+  const element = feedRef.value;
+  if (!element) return;
+
+  element.scrollTo({
+    top: element.scrollHeight,
+    behavior,
+  });
+}
+
+async function submitQuestion() {
+  if (!prompt.value.trim()) {
+    return;
+  }
+
+  if (!indexedDocuments.value.length) {
+    toast.add({
+      title: "暂无可用知识库",
+      description: "请先到知识库页面上传并完成向量化。",
+      color: "warning",
+    });
+    return;
+  }
+
+  await chatStore.ask();
+  await nextTick();
+  autoResizeComposer();
+  scrollFeedToBottom();
+}
+
+function onPromptKeydown(event: KeyboardEvent) {
+  if (event.key !== "Enter" || event.shiftKey || isComposing.value) {
+    return;
+  }
+
+  event.preventDefault();
+
+  if (!canSubmit.value) {
+    return;
+  }
+
+  void submitQuestion();
+}
+
+function onPromptInput() {
+  autoResizeComposer();
+}
+
+function formatTrace(trace: Record<string, unknown> | null) {
+  return trace ? JSON.stringify(trace, null, 2) : "";
+}
+
+watch(
+  [messages, isResponding],
+  async () => {
+    await nextTick();
+    scrollFeedToBottom();
+  },
+  { deep: true },
+);
+
 onMounted(() => {
   if (!documents.value.length) {
-    documentStore.refreshDocuments();
+    void documentStore.refreshDocuments();
   }
+
+  void nextTick(() => {
+    autoResizeComposer();
+    scrollFeedToBottom("auto");
+  });
 });
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#fcfbf8] px-4 py-6 md:px-8 md:py-8">
-    <div class="mx-auto max-w-6xl space-y-6">
-      <div
-        class="rounded-[28px] border border-[#e8e1d6] bg-white px-6 py-6 shadow-[0_20px_60px_rgba(34,24,12,0.06)]"
-      >
-        <p class="text-xs uppercase tracking-[0.22em] text-zinc-400">
-          Grounded Answer
-        </p>
-        <div
-          class="mt-2 flex flex-col gap-2 md:flex-row md:items-end md:justify-between"
-        >
-          <div>
-            <h1 class="text-2xl font-semibold tracking-tight text-zinc-950">
-              对话助手
-            </h1>
-            <p class="mt-1 text-sm text-zinc-500">
-              基于已索引文档生成法律问答，并给出可追溯的引用依据。
-            </p>
-          </div>
-          <UBadge color="neutral" variant="subtle" size="lg">
-            {{ indexedDocuments.length }} 个可用文档
-          </UBadge>
-        </div>
-      </div>
-
-      <div class="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <UCard
-          class="rounded-[28px] ring-1 ring-[#ebe5da] shadow-[0_20px_60px_rgba(34,24,12,0.05)]"
-        >
-          <template #header>
-            <div>
-              <h2 class="text-base font-semibold text-zinc-900">提问设置</h2>
-              <p class="mt-1 text-sm text-zinc-500">
-                支持按文档范围过滤，并控制回答时参考的来源数量。
-              </p>
-            </div>
-          </template>
-
-          <div class="space-y-5">
-            <div>
-              <label class="mb-2 block text-sm font-medium text-zinc-700">
-                法律问题
-              </label>
-              <textarea
-                v-model="prompt"
-                rows="6"
-                class="w-full rounded-2xl border border-[#e7e1d6] bg-[#fcfbf8] px-4 py-3 text-sm text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400"
-                placeholder="例如：房屋被他人占有时，我应该如何主张返还原物？"
-              />
-            </div>
-
-            <div>
-              <label class="mb-2 block text-sm font-medium text-zinc-700">
-                参考来源数量
-              </label>
-              <USelect
-                v-model="topK"
-                :items="topKOptions"
-                value-key="value"
-                class="w-full"
-              />
-            </div>
-
-            <div>
-              <label class="mb-2 block text-sm font-medium text-zinc-700">
-                限制文档范围
-              </label>
-              <USelectMenu
-                v-model="selectedDocumentIds"
-                :items="candidateOptions"
-                value-key="value"
-                label-key="label"
-                multiple
-                searchable
-                :loading="isLoadingDocuments"
-                placeholder="默认检索全部已索引文档"
-                class="w-full"
-              />
-            </div>
-
-            <div class="flex items-center gap-3 pt-2">
-              <UButton color="neutral" variant="ghost" @click="chatStore.reset()">
-                清空回答
-              </UButton>
-              <UButton
-                color="primary"
-                :loading="isResponding"
-                @click="chatStore.ask()"
-              >
-                开始问答
-              </UButton>
-            </div>
-
-            <div
-              v-if="!indexedDocuments.length"
-              class="rounded-2xl border border-dashed border-[#e7e1d6] bg-[#fcfbf8] px-4 py-4 text-sm text-zinc-500"
-            >
-              当前还没有已索引文档。请先在“知识库”页面上传并完成向量化。
+  <div class="chat-page px-4 py-6 md:px-8 md:py-8">
+    <div class="mx-auto max-w-[1380px]">
+      <div class="chat-workbench">
+        <aside class="chat-sidebar">
+          <div class="chat-sidebar__hero">
+            <div class="chat-sidebar__mark">
+              <UIcon name="i-lucide-scale" class="h-6 w-6" />
             </div>
           </div>
-        </UCard>
 
-        <UCard
-          class="rounded-[28px] ring-1 ring-[#ebe5da] shadow-[0_20px_60px_rgba(34,24,12,0.05)]"
-        >
-          <template #header>
-            <div
-              class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
-            >
+
+          <div class="chat-sidebar__stats">
+            <div class="chat-stat">
+              <span class="chat-stat__label">知识库</span>
+              <strong class="chat-stat__value">{{ indexedCountLabel }}</strong>
+            </div>
+            <div class="chat-stat">
+              <span class="chat-stat__label">当前范围</span>
+              <strong class="chat-stat__value">{{ scopeLabel }}</strong>
+            </div>
+          </div>
+
+          <section class="chat-panel">
+            <div class="chat-panel__header">
               <div>
-                <h2 class="text-base font-semibold text-zinc-900">回答结果</h2>
-                <p class="mt-1 text-sm text-zinc-500">
-                  回答中的 [1][2] 编号与下方引用卡片一一对应。
-                </p>
+                <h2>检索设置</h2>
               </div>
-              <div class="flex flex-wrap items-center gap-2">
-                <UBadge v-if="hasAnswered" color="neutral" variant="subtle">
-                  {{ citationCountLabel }}
-                </UBadge>
-                <UBadge
-                  v-if="meta.generation_mode"
-                  color="primary"
-                  variant="subtle"
-                >
-                  {{ String(meta.generation_mode) }}
-                </UBadge>
-                <UBadge
-                  v-if="meta.grounding_status"
-                  color="warning"
-                  variant="subtle"
-                >
-                  {{ String(meta.grounding_status) }}
-                </UBadge>
-              </div>
-            </div>
-          </template>
-
-          <div
-            v-if="!hasAnswered"
-            class="py-16 text-center text-sm text-zinc-400"
-          >
-            输入问题后，这里会生成基于文档依据的回答与引用。
-          </div>
-
-          <div v-else class="space-y-6">
-            <div class="rounded-[24px] border border-[#ece6dc] bg-[#fcfbf8] p-5">
-              <p class="text-xs uppercase tracking-[0.2em] text-zinc-400">Answer</p>
-              <p
-                class="mt-3 whitespace-pre-wrap text-sm leading-7 text-zinc-700"
-              >
-                {{ answer }}
-              </p>
-            </div>
-
-            <div
-              v-if="meta.answer_generation_skipped_reason"
-              class="rounded-2xl border border-[#eadfcb] bg-[#fff8ec] px-4 py-3 text-sm text-[#8a5a14]"
-            >
-              当前为兜底模式：
-              {{ String(meta.answer_generation_skipped_reason) }}
+              <UBadge color="neutral" variant="subtle" size="sm">
+                {{ topK }} 条
+              </UBadge>
             </div>
 
             <div class="space-y-4">
+              <div>
+                <label class="chat-field__label">参考来源数量</label>
+                <USelect
+                  v-model="topK"
+                  :items="topKOptions"
+                  value-key="value"
+                  class="w-full"
+                />
+              </div>
+
+              <div>
+                <label class="chat-field__label">限定文档范围</label>
+                <USelectMenu
+                  v-model="selectedDocumentIds"
+                  :items="candidateOptions"
+                  value-key="value"
+                  label-key="label"
+                  multiple
+                  searchable
+                  :loading="isLoadingDocuments"
+                  placeholder="默认检索全部已索引文档"
+                  class="w-full"
+                />
+              </div>
+
+              <p class="chat-panel__copy">{{ sideSummary }}</p>
+
               <div
-                v-for="citation in citations"
-                :key="citation.chunk_id"
-                class="rounded-[24px] border border-[#ece6dc] bg-white p-5"
+                v-if="selectedDocuments.length"
+                class="flex flex-wrap gap-2"
               >
-                <div
-                  class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"
+                <UBadge
+                  v-for="item in selectedDocuments.slice(0, 4)"
+                  :key="item.id"
+                  color="neutral"
+                  variant="subtle"
+                  size="xs"
                 >
-                  <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <UBadge color="primary" variant="subtle" size="xs">
-                        [{{ citation.citation_number }}]
-                      </UBadge>
-                      <p class="truncate text-sm font-semibold text-zinc-900">
-                        {{ citation.original_filename }}
-                      </p>
-                      <UBadge color="neutral" variant="subtle" size="xs">
-                        L{{ citation.chunk_level }} / #{{ citation.chunk_index }}
-                      </UBadge>
-                      <UBadge color="neutral" variant="subtle" size="xs">
-                        第 {{ citation.page_number || 0 }} 页
-                      </UBadge>
-                    </div>
-                    <p class="mt-1 text-xs text-zinc-500">
-                      chunk_id: {{ citation.chunk_id }}
-                    </p>
-                  </div>
+                  {{ item.original_filename }}
+                </UBadge>
+                <UBadge
+                  v-if="selectedDocuments.length > 4"
+                  color="neutral"
+                  variant="subtle"
+                  size="xs"
+                >
+                  +{{ selectedDocuments.length - 4 }}
+                </UBadge>
+              </div>
+            </div>
+          </section>
 
-                  <div class="flex items-center gap-2 text-xs text-zinc-500">
-                    <span>score</span>
-                    <span
-                      class="rounded-full bg-[#fcfbf8] px-2 py-1 font-mono text-zinc-900 ring-1 ring-[#e7e1d6]"
-                    >
-                      {{ formatScore(citation.score) }}
-                    </span>
-                  </div>
+          <section class="chat-panel">
+            <div class="chat-panel__header">
+              <div>
+                <h2>可用文档</h2>
+              </div>
+              <UBadge color="neutral" variant="subtle" size="sm">
+                {{ indexedDocuments.length }}
+              </UBadge>
+            </div>
+
+            <div v-if="isLoadingDocuments" class="chat-empty">
+              正在加载文档列表…
+            </div>
+            <div v-else-if="!indexedDocuments.length" class="chat-empty">
+              还没有已索引文档。请先到“知识库”页面上传并完成向量化。
+            </div>
+            <div v-else class="chat-doc-list">
+              <article
+                v-for="item in visibleIndexedDocuments"
+                :key="item.id"
+                class="chat-doc-item"
+              >
+                <div class="chat-doc-item__icon">
+                  <UIcon name="i-lucide-file-text" class="h-4 w-4" />
                 </div>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-sm font-medium text-zinc-900">
+                    {{ item.original_filename }}
+                  </p>
+                  <p class="mt-1 text-xs text-zinc-500">
+                    {{ item.file_extension }} · {{ item.page_count || 0 }} 页
+                  </p>
+                </div>
+              </article>
+              <p
+                v-if="indexedDocuments.length > visibleIndexedDocuments.length"
+                class="text-xs text-zinc-500"
+              >
+                另有 {{ indexedDocuments.length - visibleIndexedDocuments.length }} 份已索引文档可参与问答。
+              </p>
+            </div>
+          </section>
+        </aside>
 
-                <p
-                  class="mt-4 whitespace-pre-wrap text-sm leading-7 text-zinc-700"
+        <section class="chat-stage">
+          <header class="chat-stage__header">
+            <div class="min-w-0">
+              <div class="status-chip">
+                <span
+                  class="status-dot"
+                  :class="isResponding || indexedDocuments.length ? 'status-dot--live' : 'status-dot--idle'"
+                />
+                <span>{{ headerStatusLabel }}</span>
+              </div>
+              <h2 class="chat-stage__title">法律问答会话</h2>
+              <p class="chat-stage__hint">{{ headerHint }}</p>
+            </div>
+
+            <div class="chat-stage__badges">
+              <UBadge color="neutral" variant="subtle" size="sm">
+                {{ scopeLabel }}
+              </UBadge>
+              <UBadge
+                v-if="lastAssistantMessage?.citations.length"
+                color="neutral"
+                variant="subtle"
+                size="sm"
+              >
+                {{ latestCitationCountLabel }}
+              </UBadge>
+              <UBadge
+                v-if="latestMeta.generation_mode"
+                color="primary"
+                variant="subtle"
+                size="sm"
+              >
+                {{ String(latestMeta.generation_mode) }}
+              </UBadge>
+              <UBadge
+                v-if="latestMeta.grounding_status"
+                color="warning"
+                variant="subtle"
+                size="sm"
+              >
+                {{ String(latestMeta.grounding_status) }}
+              </UBadge>
+            </div>
+          </header>
+
+          <div ref="feedRef" class="chat-feed">
+            <div
+              v-if="!messages.length"
+              class="welcome-state"
+            >
+              <div class="welcome-state__icon">
+                <UIcon name="i-lucide-message-circle-heart" class="h-10 w-10" />
+              </div>
+              <h3>开始一轮带引用的法律问答</h3>
+              <p>
+                发送问题后，页面会按聊天流展示你的提问、检索步骤、系统回答，以及每条引用对应的证据卡片。
+              </p>
+
+              <div class="welcome-prompts">
+                <div class="prompt-card">
+                  房屋被他人占有时，我应如何主张返还原物？
+                </div>
+                <div class="prompt-card">
+                  合同违约责任通常需要满足哪些认定条件？
+                </div>
+                <div class="prompt-card">
+                  劳动争议中，用人单位单方解除合同需要哪些依据？
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="message-stack">
+              <div
+                v-for="message in messages"
+                :key="message.id"
+                class="message-row"
+                :class="
+                  message.role === 'user'
+                    ? 'message-row--user'
+                    : 'message-row--assistant'
+                "
+              >
+                <article
+                  class="message-bubble"
+                  :class="
+                    message.role === 'user'
+                      ? 'message-bubble--user'
+                      : 'message-bubble--assistant'
+                  "
                 >
-                  {{ citation.snippet }}
-                </p>
+                  <template v-if="message.role === 'user'">
+                    <p class="message-role">你</p>
+                    <p class="message-text">{{ message.text }}</p>
+                  </template>
+
+                  <template v-else>
+                    <div class="message-bubble__meta">
+                      <span class="message-role">助手</span>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <UBadge
+                          v-if="message.citations.length"
+                          color="neutral"
+                          variant="subtle"
+                          size="xs"
+                        >
+                          {{ message.citations.length }} 条引用
+                        </UBadge>
+                        <UBadge
+                          v-if="message.meta.generation_mode"
+                          color="primary"
+                          variant="subtle"
+                          size="xs"
+                        >
+                          {{ String(message.meta.generation_mode) }}
+                        </UBadge>
+                      </div>
+                    </div>
+
+                    <div
+                      v-if="message.isThinking && !message.steps.length && !message.text"
+                      class="thinking-line"
+                    >
+                      <span class="thinking-dots" aria-hidden="true">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                      <span>正在准备检索与生成流程</span>
+                    </div>
+
+                    <div v-if="message.steps.length" class="step-list">
+                      <div
+                        v-for="(step, index) in message.steps"
+                        :key="`${message.id}-${index}-${step.key}`"
+                        class="step-item"
+                        :class="{
+                          'step-item--active':
+                            message.isStreaming && index === message.steps.length - 1,
+                          'step-item--error': step.status === 'error',
+                        }"
+                      >
+                        <span class="step-index">{{ index + 1 }}</span>
+                        <div class="min-w-0">
+                          <p class="step-label">{{ step.label }}</p>
+                          <p v-if="step.detail" class="step-detail">
+                            {{ step.detail }}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p v-if="message.text" class="message-text">
+                      {{ message.text }}
+                    </p>
+
+                    <div
+                      v-if="message.error"
+                      class="message-note message-note--error"
+                    >
+                      {{ message.error }}
+                    </div>
+
+                    <div
+                      v-else-if="message.meta.answer_generation_skipped_reason"
+                      class="message-note"
+                    >
+                      当前为兜底模式：{{
+                        String(message.meta.answer_generation_skipped_reason)
+                      }}
+                    </div>
+
+                    <div v-if="message.citations.length" class="citation-list">
+                      <article
+                        v-for="citation in message.citations"
+                        :key="citation.chunk_id"
+                        class="citation-card"
+                      >
+                        <div class="citation-card__header">
+                          <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                              <UBadge color="primary" variant="subtle" size="xs">
+                                [{{ citation.citation_number }}]
+                              </UBadge>
+                              <p class="citation-card__title">
+                                {{ citation.original_filename }}
+                              </p>
+                            </div>
+
+                            <div class="citation-card__meta">
+                              <span class="citation-chip">
+                                L{{ citation.chunk_level }} / #{{ citation.chunk_index }}
+                              </span>
+                              <span class="citation-chip">
+                                第 {{ citation.page_number || 0 }} 页
+                              </span>
+                              <span class="citation-chip mono">
+                                score {{ formatScore(citation.score) }}
+                              </span>
+                            </div>
+                          </div>
+
+                          <span class="citation-chip mono">
+                            {{ citation.chunk_id }}
+                          </span>
+                        </div>
+
+                        <p class="citation-snippet">{{ citation.snippet }}</p>
+                      </article>
+                    </div>
+
+                    <details
+                      v-if="message.trace"
+                      class="trace-panel"
+                    >
+                      <summary>查看检索元数据</summary>
+                      <pre>{{ formatTrace(message.trace) }}</pre>
+                    </details>
+                  </template>
+                </article>
               </div>
             </div>
           </div>
-        </UCard>
+
+          <footer class="composer-shell">
+            <div class="composer-shell__meta">
+              <span>{{ scopeLabel }}</span>
+              <span>Enter 发送，Shift + Enter 换行</span>
+            </div>
+
+            <div class="composer">
+              <div class="composer__prefix">
+                <UIcon name="i-lucide-message-circle-more" class="h-5 w-5" />
+              </div>
+
+              <textarea
+                ref="composerRef"
+                v-model="prompt"
+                rows="1"
+                placeholder="输入法律问题，例如：房屋被他人占有时，我应如何主张返还原物？"
+                @keydown="onPromptKeydown"
+                @input="onPromptInput"
+                @compositionstart="isComposing = true"
+                @compositionend="isComposing = false"
+              />
+
+              <UButton
+                color="primary"
+                class="composer__send"
+                :loading="isResponding"
+                :disabled="!canSubmit"
+                @click="submitQuestion"
+              >
+                发送
+              </UButton>
+            </div>
+          </footer>
+        </section>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.chat-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(221, 228, 255, 0.7), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(244, 234, 216, 0.82), transparent 30%),
+    #fcfbf8;
+}
+
+.chat-workbench {
+  display: grid;
+  gap: 24px;
+  align-items: stretch;
+}
+
+.chat-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border-radius: 32px;
+  border: 1px solid #ebe5da;
+  background: linear-gradient(180deg, rgba(247, 244, 238, 0.98), rgba(255, 255, 255, 0.94));
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(34, 24, 12, 0.06);
+}
+
+.chat-sidebar__hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.chat-sidebar__mark {
+  display: flex;
+  height: 56px;
+  width: 56px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #eef2ff, #ffffff);
+  color: #3158ff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.chat-sidebar__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.chat-stat {
+  border-radius: 22px;
+  border: 1px solid #ece6dc;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 14px 16px;
+}
+
+.chat-stat__label {
+  display: block;
+  font-size: 12px;
+  color: #71717a;
+}
+
+.chat-stat__value {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #18181b;
+}
+
+.chat-panel {
+  border-radius: 24px;
+  border: 1px solid #ece6dc;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.chat-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.chat-panel__header h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #18181b;
+}
+
+.chat-panel__header p,
+.chat-panel__copy {
+  margin-top: 4px;
+  font-size: 0.86rem;
+  line-height: 1.65;
+  color: #71717a;
+}
+
+.chat-field__label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #3f3f46;
+}
+
+.chat-empty {
+  border-radius: 20px;
+  border: 1px dashed #e7e1d6;
+  background: #fcfbf8;
+  padding: 16px;
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: #71717a;
+}
+
+.chat-doc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-doc-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 18px;
+  border: 1px solid #eee7db;
+  background: #fcfbf8;
+  padding: 12px 13px;
+}
+
+.chat-doc-item__icon {
+  display: flex;
+  height: 34px;
+  width: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #3158ff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.chat-stage {
+  display: flex;
+  min-height: calc(100vh - 4rem);
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 32px;
+  border: 1px solid #ebe5da;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 20px 60px rgba(34, 24, 12, 0.06);
+  backdrop-filter: blur(12px);
+}
+
+.chat-stage__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #ebe5da;
+  padding: 22px 24px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 999px;
+  background: #f7f4ee;
+  padding: 8px 12px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #3f3f46;
+}
+
+.status-dot {
+  height: 10px;
+  width: 10px;
+  border-radius: 999px;
+}
+
+.status-dot--live {
+  background: #3158ff;
+  box-shadow: 0 0 0 4px rgba(49, 88, 255, 0.14);
+}
+
+.status-dot--idle {
+  background: #b7b0a4;
+}
+
+.chat-stage__title {
+  margin-top: 14px;
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #18181b;
+}
+
+.chat-stage__hint {
+  margin-top: 6px;
+  max-width: 720px;
+  font-size: 0.92rem;
+  line-height: 1.7;
+  color: #71717a;
+}
+
+.chat-stage__badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.chat-feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 24px 20px;
+  background:
+    linear-gradient(180deg, rgba(252, 251, 248, 0.88), rgba(252, 251, 248, 0.52)),
+    radial-gradient(circle at top center, rgba(238, 242, 255, 0.55), transparent 24%);
+}
+
+.welcome-state {
+  margin: auto;
+  max-width: 680px;
+  text-align: center;
+}
+
+.welcome-state__icon {
+  display: inline-flex;
+  height: 96px;
+  width: 96px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 30px;
+  background: linear-gradient(135deg, #ffffff, #f7f4ee);
+  color: #3158ff;
+  box-shadow: 0 18px 40px rgba(34, 24, 12, 0.08);
+}
+
+.welcome-state h3 {
+  margin-top: 24px;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: #18181b;
+}
+
+.welcome-state p {
+  margin-top: 10px;
+  font-size: 0.96rem;
+  line-height: 1.8;
+  color: #71717a;
+}
+
+.welcome-prompts {
+  margin-top: 24px;
+  display: grid;
+  gap: 12px;
+  text-align: left;
+}
+
+.prompt-card {
+  border-radius: 20px;
+  border: 1px solid #ece6dc;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 16px 18px;
+  font-size: 0.94rem;
+  line-height: 1.7;
+  color: #3f3f46;
+}
+
+.message-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.message-row {
+  display: flex;
+}
+
+.message-row--user {
+  justify-content: flex-end;
+}
+
+.message-row--assistant {
+  justify-content: flex-start;
+}
+
+.message-bubble {
+  max-width: min(860px, 88%);
+  border-radius: 26px;
+  padding: 18px 20px;
+  box-shadow: 0 10px 24px rgba(34, 24, 12, 0.05);
+}
+
+.message-bubble--assistant {
+  border: 1px solid #ece6dc;
+  border-bottom-left-radius: 10px;
+  background: #ffffff;
+}
+
+.message-bubble--user {
+  border-bottom-right-radius: 10px;
+  background: linear-gradient(135deg, #3158ff, #5f7eff);
+  color: #ffffff;
+}
+
+.message-bubble__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.message-role {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+.message-bubble--user .message-role {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.message-text {
+  white-space: pre-wrap;
+  font-size: 0.95rem;
+  line-height: 1.9;
+  color: #3f3f46;
+}
+
+.message-bubble--user .message-text {
+  color: #ffffff;
+}
+
+.thinking-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #18181b;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.thinking-dots span {
+  height: 7px;
+  width: 7px;
+  border-radius: 999px;
+  background: #3158ff;
+  animation: thinking-bounce 1.4s infinite ease-in-out both;
+}
+
+.thinking-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.step-list {
+  margin-bottom: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.step-item {
+  display: flex;
+  gap: 12px;
+  border-radius: 18px;
+  border: 1px solid #ece6dc;
+  background: #fcfbf8;
+  padding: 12px 13px;
+}
+
+.step-item--active {
+  border-color: #dbe3ff;
+  background: linear-gradient(180deg, #fcfbff, #fcfbf8);
+}
+
+.step-item--error {
+  border-color: #f4c8c8;
+  background: #fff7f7;
+}
+
+.step-index {
+  display: inline-flex;
+  height: 24px;
+  width: 24px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #eef2ff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #3158ff;
+}
+
+.step-item--error .step-index {
+  background: #fde8e8;
+  color: #b42318;
+}
+
+.step-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #18181b;
+}
+
+.step-detail {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: #71717a;
+}
+
+.message-note {
+  margin-top: 14px;
+  border-radius: 18px;
+  border: 1px solid #eadfcb;
+  background: #fff8ec;
+  padding: 12px 14px;
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: #8a5a14;
+}
+
+.message-note--error {
+  border-color: #f4c8c8;
+  background: #fff7f7;
+  color: #b42318;
+}
+
+.citation-list {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.citation-card {
+  border-radius: 20px;
+  border: 1px solid #ece6dc;
+  background: #fcfbf8;
+  padding: 14px 15px;
+}
+
+.citation-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.citation-card__title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #18181b;
+}
+
+.citation-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.citation-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  color: #52525b;
+  box-shadow: inset 0 0 0 1px #e7e1d6;
+}
+
+.citation-chip.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.citation-snippet {
+  margin-top: 12px;
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  line-height: 1.8;
+  color: #52525b;
+}
+
+.trace-panel {
+  margin-top: 16px;
+  border-radius: 18px;
+  border: 1px solid #ece6dc;
+  background: #fcfbf8;
+  padding: 12px 14px;
+}
+
+.trace-panel summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #3f3f46;
+}
+
+.trace-panel pre {
+  margin-top: 12px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: #52525b;
+}
+
+.composer-shell {
+  border-top: 1px solid #ebe5da;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 18px 24px 22px;
+}
+
+.composer-shell__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 0.76rem;
+  color: #71717a;
+}
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  border-radius: 28px;
+  border: 1px solid #e7e1d6;
+  background: #fcfbf8;
+  padding: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.composer:focus-within {
+  border-color: #cfd8ff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 4px rgba(49, 88, 255, 0.08);
+}
+
+.composer__prefix {
+  display: flex;
+  height: 44px;
+  width: 44px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid #ebe5da;
+  background: #ffffff;
+  color: #3158ff;
+}
+
+.composer textarea {
+  min-height: 52px;
+  max-height: 180px;
+  flex: 1;
+  resize: none;
+  border: none;
+  background: transparent;
+  padding: 10px 0;
+  font-size: 0.96rem;
+  line-height: 1.8;
+  color: #18181b;
+  outline: none;
+}
+
+.composer textarea::placeholder {
+  color: #a1a1aa;
+}
+
+.composer__send {
+  min-height: 52px;
+  border-radius: 999px;
+}
+
+@keyframes thinking-bounce {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.35;
+  }
+
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (min-width: 1280px) {
+  .chat-workbench {
+    grid-template-columns: 340px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1279px) {
+  .chat-sidebar {
+    order: 2;
+  }
+
+  .chat-stage {
+    order: 1;
+    min-height: 72vh;
+  }
+}
+
+@media (max-width: 767px) {
+  .chat-sidebar,
+  .chat-stage {
+    border-radius: 26px;
+  }
+
+  .chat-stage__header,
+  .chat-feed,
+  .composer-shell {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .message-bubble {
+    max-width: 100%;
+  }
+
+  .welcome-state h3 {
+    font-size: 1.6rem;
+  }
+
+  .chat-sidebar__stats {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
