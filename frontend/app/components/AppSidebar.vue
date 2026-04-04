@@ -7,14 +7,9 @@ const { isMobileOpen, isSidebarCollapsed } = storeToRefs(uiStore);
 const route = useRoute();
 
 const navItems = [
-  { label: "新对话", path: "/", icon: "i-lucide-pencil-line" },
+  { label: "对话助手", path: "/chat", icon: "i-lucide-message-circle" },
   { label: "知识库", path: "/documents", icon: "i-lucide-book-open" },
   { label: "智能检索", path: "/search", icon: "i-lucide-search" },
-  {
-    label: "更多",
-    icon: "i-lucide-layout-grid",
-    trailingIcon: "i-lucide-chevron-right",
-  },
 ];
 
 const shellClass = computed(() => [
@@ -53,39 +48,21 @@ function handleNavigate() {
       </div>
 
       <nav class="space-y-1 px-3 py-3">
-        <template v-for="item in navItems" :key="item.label">
-          <NuxtLink
-            v-if="item.path"
-            :to="item.path"
-            class="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-[15px] transition-colors"
-            :class="
-              isActive(item.path)
-                ? 'bg-[#eef2ff] text-[#3158ff] ring-1 ring-[#d9e1ff]'
-                : 'text-zinc-800 hover:bg-white/70'
-            "
-            @click="handleNavigate()"
-          >
-            <UIcon :name="item.icon" class="h-5 w-5 flex-shrink-0" />
-            <span class="truncate">{{ item.label }}</span>
-          </NuxtLink>
-
-          <button
-            v-else
-            type="button"
-            class="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-[15px] text-zinc-800 transition-colors hover:bg-white/70"
-            @click="handleNavigate()"
-          >
-            <div class="flex min-w-0 items-center gap-3">
-              <UIcon :name="item.icon" class="h-5 w-5 flex-shrink-0" />
-              <span class="truncate">{{ item.label }}</span>
-            </div>
-            <UIcon
-              v-if="item.trailingIcon"
-              :name="item.trailingIcon"
-              class="h-4 w-4 flex-shrink-0 text-zinc-400"
-            />
-          </button>
-        </template>
+        <NuxtLink
+          v-for="item in navItems"
+          :key="item.label"
+          :to="item.path"
+          class="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-[15px] transition-colors"
+          :class="
+            isActive(item.path)
+              ? 'bg-[#eef2ff] text-[#3158ff] ring-1 ring-[#d9e1ff]'
+              : 'text-zinc-800 hover:bg-white/70'
+          "
+          @click="handleNavigate()"
+        >
+          <UIcon :name="item.icon" class="h-5 w-5 flex-shrink-0" />
+          <span class="truncate">{{ item.label }}</span>
+        </NuxtLink>
       </nav>
     </aside>
   </div>

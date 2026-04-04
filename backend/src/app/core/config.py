@@ -13,6 +13,7 @@ class Settings(BaseSettings):
         env_file=BACKEND_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     app_name: str = "Lawyer Backend"
@@ -76,6 +77,45 @@ class Settings(BaseSettings):
     query_rewrite_timeout_seconds: int = 30
     query_rewrite_max_context_items: int = 3
     query_rewrite_max_content_chars: int = 480
+    answer_generation_enabled: bool = True
+    answer_generation_base_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "ANSWER_GENERATION_BASE_URL",
+            "ANSWER_BASE_URL",
+            "CHAT_BASE_URL",
+            "QUERY_REWRITE_BASE_URL",
+            "LLM_BASE_URL",
+            "BASE_URL",
+            "EMBEDDING_BASE_URL",
+        ),
+    )
+    answer_generation_model: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "ANSWER_GENERATION_MODEL",
+            "ANSWER_MODEL",
+            "CHAT_MODEL",
+            "QUERY_REWRITE_MODEL",
+            "QUERY_MODEL",
+            "MODEL",
+        ),
+    )
+    answer_generation_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "ANSWER_GENERATION_API_KEY",
+            "ANSWER_API_KEY",
+            "CHAT_API_KEY",
+            "QUERY_REWRITE_API_KEY",
+            "LLM_API_KEY",
+            "ARK_API_KEY",
+            "EMBEDDING_API_KEY",
+        ),
+    )
+    answer_generation_timeout_seconds: int = 45
+    answer_generation_max_context_items: int = 5
+    answer_generation_max_content_chars: int = 700
     vector_dense_dimension: int = 3072
     vector_sparse_dimension: int = 262144
     vector_leaf_chunk_size: int = 900

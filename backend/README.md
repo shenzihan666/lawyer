@@ -32,6 +32,9 @@ Important variables:
 - `QUERY_REWRITE_BASE_URL`: OpenAI-compatible chat API base URL for query rewriting
 - `QUERY_REWRITE_MODEL`: chat model used for relevance grading, step-back rewriting, and HyDE
 - `QUERY_REWRITE_API_KEY`: API token for the rewrite model
+- `ANSWER_GENERATION_BASE_URL`: OpenAI-compatible chat API base URL for grounded answer generation
+- `ANSWER_GENERATION_MODEL`: chat model used for cited answer generation
+- `ANSWER_GENERATION_API_KEY`: API token for the answer model
 
 Create a local env file before running the backend:
 
@@ -45,6 +48,7 @@ Legacy aliases remain supported for compatibility:
 - `EMBEDDER` -> `EMBEDDING_MODEL`
 - `ARK_API_KEY` -> `EMBEDDING_API_KEY`
 - `BASE_URL` / `ARK_API_KEY` / `MODEL` can also be reused by query rewrite if dedicated rewrite variables are not set
+- `QUERY_REWRITE_*` can also be reused by answer generation if dedicated answer variables are not set
 
 The backend writes structured JSON logs to `backend/logs/` with daily rotation:
 

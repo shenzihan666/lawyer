@@ -45,11 +45,14 @@ backend/
 ### Backend Ownership
 
 - `src/app/main.py`: app bootstrap, CORS, router mounting, DB initialization
+- `src/app/api/routes/chat.py`: grounded answer generation API
 - `src/app/api/routes/documents.py`: upload, list, delete, vectorize APIs
 - `src/app/core/config.py`: environment-driven settings
 - `src/app/db/`: engine, session, and declarative base
 - `src/app/models/document.py`: relational persistence model for documents and fragments
 - `src/app/schemas/document.py`: request/response contracts
+- `src/app/schemas/answer.py`: chat answer request/response contracts
+- `src/app/services/answers/`: answer generation and citation assembly
 - `src/app/services/documents/`: document orchestration and upload storage
 - `src/app/services/loaders/`: file-type-specific loader registry and normalization rules
 - `src/app/services/vectors/`: chunking, embeddings, Milvus indexing, and retrieval
@@ -70,8 +73,10 @@ frontend/
 ### Frontend Ownership
 
 - `app/app.vue`: global shell, mobile top bar, and sidebar layout
-- `app/pages/index.vue`: AI chat-style homepage
+- `app/pages/index.vue`: redirect entrypoint to the chat workspace
+- `app/pages/chat.vue`: grounded Q&A page with citations
 - `app/pages/documents.vue`: document upload and management page
+- `app/stores/chat.ts`: answer request state and citation payload handling
 - `app/components/AppSidebar.vue`: left navigation sidebar
 - `nuxt.config.ts`: runtime config, including public API base
 - `package.json`: `pnpm` scripts and frontend dependencies
@@ -87,13 +92,16 @@ frontend/
 - Change vector indexing or retrieval behavior:
   - `backend/src/app/services/vectors/`
   - `backend/src/app/api/routes/search.py`
+- Change answer generation or citation behavior:
+  - `backend/src/app/services/answers/`
+  - `backend/src/app/api/routes/chat.py`
 - Change metadata schema:
   - `backend/src/app/models/document.py`
   - `backend/src/app/schemas/document.py`
 - Change upload page layout:
   - `frontend/app/pages/documents.vue`
-- Change chat homepage layout:
-  - `frontend/app/pages/index.vue`
+- Change chat workspace layout:
+  - `frontend/app/pages/chat.vue`
 - Change sidebar layout:
   - `frontend/app/components/AppSidebar.vue`
 - Change API base or client runtime behavior:

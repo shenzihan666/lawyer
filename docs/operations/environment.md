@@ -143,6 +143,41 @@ Legacy alias:
 - Purpose: max characters kept per retrieved chunk when building rewrite context
 - Default: `480`
 
+### `ANSWER_GENERATION_ENABLED`
+
+- Purpose: enable grounded answer generation on top of retrieved evidence
+- Default: `true`
+
+### `ANSWER_GENERATION_BASE_URL`
+
+- Purpose: OpenAI-compatible chat completion base URL used for cited answer generation
+- Fallbacks: `ANSWER_BASE_URL`, `CHAT_BASE_URL`, `QUERY_REWRITE_BASE_URL`, `LLM_BASE_URL`, `BASE_URL`, `EMBEDDING_BASE_URL`
+
+### `ANSWER_GENERATION_MODEL`
+
+- Purpose: chat model used for grounded legal answer generation
+- Fallbacks: `ANSWER_MODEL`, `CHAT_MODEL`, `QUERY_REWRITE_MODEL`, `QUERY_MODEL`, `MODEL`
+
+### `ANSWER_GENERATION_API_KEY`
+
+- Purpose: bearer token for the answer generation model
+- Fallbacks: `ANSWER_API_KEY`, `CHAT_API_KEY`, `QUERY_REWRITE_API_KEY`, `LLM_API_KEY`, `ARK_API_KEY`, `EMBEDDING_API_KEY`
+
+### `ANSWER_GENERATION_TIMEOUT_SECONDS`
+
+- Purpose: timeout for the answer generation API request
+- Default: `45`
+
+### `ANSWER_GENERATION_MAX_CONTEXT_ITEMS`
+
+- Purpose: number of retrieved chunks forwarded to the answer model
+- Default: `5`
+
+### `ANSWER_GENERATION_MAX_CONTENT_CHARS`
+
+- Purpose: max characters kept per retrieved chunk when building answer context
+- Default: `700`
+
 ### `REDIS_URL`
 
 - Purpose: Redis cache connection for chunk/search caching
@@ -185,5 +220,6 @@ export NUXT_PUBLIC_API_BASE="http://127.0.0.1:8000/api/v1"
 - local development can run without PostgreSQL or Milvus
 - local vector search needs PostgreSQL, Redis, and Milvus available together
 - second-stage retrieval needs a chat-capable model configured through `QUERY_REWRITE_*` or compatible fallback variables
+- grounded answer generation needs an answer model configured through `ANSWER_GENERATION_*` or compatible fallback variables
 - production should run PostgreSQL for metadata and chunk storage
 - Redis should be treated as a cache layer, not the source of truth

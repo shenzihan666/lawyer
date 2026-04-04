@@ -12,14 +12,15 @@
 Current UI is split into a light app shell plus page routes:
 
 - app shell: `frontend/app/app.vue`
-- chat homepage: `frontend/app/pages/index.vue`
+- redirect entrypoint: `frontend/app/pages/index.vue`
+- grounded chat workspace: `frontend/app/pages/chat.vue`
 - document workspace: `frontend/app/pages/documents.vue`
 - sidebar navigation: `frontend/app/components/AppSidebar.vue`
 - runtime config: `frontend/nuxt.config.ts`
 
 ## Current Responsibilities
 
-- chat-first landing page and prompt composer UI
+- grounded single-turn legal Q&A with citation cards
 - left navigation with desktop and mobile variants
 - drag-and-drop or picker-based file selection
 - single and batch upload
@@ -43,8 +44,8 @@ Default local value:
 
 The current frontend mixes two visual surfaces:
 
-- chat homepage with a soft neutral background and app-like sidebar
-- rounded input/composer surface for future AI interaction
+- chat workspace with a soft neutral background and app-like sidebar
+- rounded prompt surface plus answer-and-citation panels
 - separate document workspace for upload and list management
 - warm neutral surfaces instead of a dense dashboard-only layout
 
@@ -53,4 +54,4 @@ This gives room for later expansion into:
 - document detail pages
 - fragment preview pages
 - vectorization history
-- retrieval and real chat interfaces
+- multi-turn chat and session history

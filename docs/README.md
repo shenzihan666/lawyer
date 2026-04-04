@@ -17,8 +17,9 @@ Read in this order:
 2. `architecture/overview.md`
 3. `architecture/document-ingestion.md`
 4. `api/documents.md`
-5. `operations/development.md`
-6. `operations/environment.md`
+5. `api/chat.md`
+6. `operations/development.md`
+7. `operations/environment.md`
 
 ## Current Stack
 
@@ -36,6 +37,7 @@ Read in this order:
 - `architecture/frontend.md`: frontend structure and UI integration notes
 - `architecture/document-ingestion.md`: document loading semantics and storage flow
 - `api/documents.md`: document API contract summary
+- `api/chat.md`: grounded answer generation and citation API summary
 - `operations/development.md`: install, run, test, and verification commands
 - `operations/environment.md`: environment variables and deployment-oriented settings
 

@@ -55,3 +55,31 @@ def test_query_rewrite_settings_keep_legacy_env_aliases(
     assert settings.query_rewrite_base_url == "https://legacy.example/v1"
     assert settings.query_rewrite_model == "legacy-chat-model"
     assert settings.query_rewrite_api_key == "legacy-secret"
+
+
+def test_answer_generation_settings_support_explicit_env_names(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ANSWER_GENERATION_BASE_URL", "https://llm.example/v1")
+    monkeypatch.setenv("ANSWER_GENERATION_MODEL", "gpt-answer")
+    monkeypatch.setenv("ANSWER_GENERATION_API_KEY", "answer-secret")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.answer_generation_base_url == "https://llm.example/v1"
+    assert settings.answer_generation_model == "gpt-answer"
+    assert settings.answer_generation_api_key == "answer-secret"
+
+
+def test_answer_generation_settings_reuse_fallback_aliases(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("QUERY_REWRITE_BASE_URL", "https://rewrite.example/v1")
+    monkeypatch.setenv("QUERY_REWRITE_MODEL", "rewrite-model")
+    monkeypatch.setenv("QUERY_REWRITE_API_KEY", "rewrite-secret")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.answer_generation_base_url == "https://rewrite.example/v1"
+    assert settings.answer_generation_model == "rewrite-model"
+    assert settings.answer_generation_api_key == "rewrite-secret"

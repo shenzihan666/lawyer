@@ -31,10 +31,7 @@ Implemented now:
 - raw document extraction into structured fragments
 - hierarchical chunk persistence in PostgreSQL
 - Milvus-based hybrid retrieval with Redis cache support
-
-Reserved for later:
-
-- retrieval and answer generation pipeline
+- single-turn grounded answer generation with inline citations
 
 ## System Flow
 
@@ -47,7 +44,9 @@ Frontend upload UI
     -> vectorization expands fragments into retrieval chunks
     -> parent/root chunks stored in PostgreSQL and cached in Redis
     -> leaf chunks embedded through external API and written to Milvus
-    -> document status returned to frontend
+    -> search retrieves grounded evidence
+    -> chat answer endpoint generates cited answer from retrieved chunks
+    -> document status and answer payload returned to frontend
 ```
 
 ## Design Principles
