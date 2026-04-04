@@ -3,11 +3,20 @@ import { storeToRefs } from "pinia";
 import { useDocumentStore } from "../../stores/documents";
 
 const store = useDocumentStore();
-const { documents, stagedFiles, isLoading, isWorking } = storeToRefs(store);
+const { documents, stagedFiles, isLoading, isWorking, vectorizationProgress } =
+  storeToRefs(store);
 
 const selectedRows = ref<Record<string, boolean>>({});
 const selectedIds = computed(() => Object.keys(selectedRows.value));
 const hasSelection = computed(() => selectedIds.value.length > 0);
+const showVectorizationProgress = computed(
+  () =>
+    vectorizationProgress.value.active || vectorizationProgress.value.percent > 0,
+);
+const trackedVectorizationDocuments = computed(() => {
+  const trackedIds = new Set(vectorizationProgress.value.document_ids);
+  return documents.value.filter((item) => trackedIds.has(item.id));
+});
 
 const acceptedFormats = ".pdf,.doc,.docx,.xls,.xlsx";
 
@@ -240,6 +249,64 @@ onMounted(() => {
             </div>
           </div>
         </template>
+
+        <div
+          v-if="showVectorizationProgress"
+          class="mb-5 rounded-[24px] border border-[#ece4d6] bg-[#fbf6ed] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+        >
+          <div
+            class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+          >
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-semibold text-zinc-900">
+                  Indexing progress
+                </span>
+                <UBadge color="neutral" variant="subtle" size="xs">
+                  {{ vectorizationProgress.completed }} /
+                  {{ vectorizationProgress.total }} docs
+                </UBadge>
+              </div>
+              <p class="mt-1 text-sm text-zinc-600">
+                {{ vectorizationProgress.label }}
+              </p>
+            </div>
+            <div class="text-left md:text-right">
+              <p class="text-2xl font-semibold tracking-tight text-zinc-950">
+                {{ vectorizationProgress.percent }}%
+              </p>
+              <p class="text-xs text-zinc-500">
+                {{ vectorizationProgress.indexed }} indexed ·
+                {{ vectorizationProgress.failed }} failed ·
+                {{ vectorizationProgress.indexing + vectorizationProgress.queued }}
+                active
+              </p>
+            </div>
+          </div>
+
+          <div class="mt-4 h-2 overflow-hidden rounded-full bg-white ring-1 ring-[#eadfce]">
+            <div
+              class="h-full rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-emerald-500 transition-all duration-500 ease-out"
+              :style="{ width: `${vectorizationProgress.percent}%` }"
+            />
+          </div>
+
+          <div
+            v-if="trackedVectorizationDocuments.length"
+            class="mt-3 flex flex-wrap gap-2"
+          >
+            <UBadge
+              v-for="item in trackedVectorizationDocuments"
+              :key="item.id"
+              color="neutral"
+              variant="subtle"
+              size="xs"
+            >
+              {{ item.original_filename }}
+              <span class="ml-1 text-zinc-500">{{ item.vector_status }}</span>
+            </UBadge>
+          </div>
+        </div>
 
         <UTable
           v-model:row-selection="selectedRows"

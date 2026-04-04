@@ -10,14 +10,45 @@
 Example:
 
 ```bash
-export DATABASE_URL="postgresql+psycopg://postgres:postgres@127.0.0.1:5432/lawyer"
+export DATABASE_URL="postgresql+psycopg://postgres:postgres@127.0.0.1:5433/lawyer"
 ```
+
+### `DATABASE_CONNECT_TIMEOUT_SECONDS`
+
+- Purpose: single database connect timeout used during startup checks
+- Default: `5`
+
+### `DATABASE_STARTUP_MAX_ATTEMPTS`
+
+- Purpose: number of startup retries before backend exits when database is unavailable
+- Default: `3`
+
+### `DATABASE_STARTUP_RETRY_DELAY_SECONDS`
+
+- Purpose: delay between startup retry attempts
+- Default: `2`
 
 ### `UPLOAD_ROOT_PATH`
 
 - Purpose: upload file root
 - Default: `uploads`
 - Effective path: relative to `backend/` unless absolute path is provided
+
+### `LOG_LEVEL`
+
+- Purpose: backend root log level
+- Default: `INFO`
+
+### `LOG_ROOT_PATH`
+
+- Purpose: structured log output directory
+- Default: `logs`
+- Effective path: relative to `backend/` unless absolute path is provided
+
+### `LOG_RETENTION_DAYS`
+
+- Purpose: number of daily rotated log files to retain
+- Default: `30`
 
 ### `FRONTEND_ORIGINS`
 
@@ -46,18 +77,31 @@ export FRONTEND_ORIGINS="http://127.0.0.1:3000,http://localhost:3000"
 
 - Purpose: collection target for document vectors
 
-### `BASE_URL`
+### `EMBEDDING_BASE_URL`
 
 - Purpose: external embedding API base URL
-- Example: `https://your-llm-endpoint/v1`
+- Google Gemini OpenAI-compatible example: `https://generativelanguage.googleapis.com/v1beta/openai`
 
-### `EMBEDDER`
+Legacy alias:
+
+- `BASE_URL`
+
+### `EMBEDDING_MODEL`
 
 - Purpose: embedding model name sent to the external embedding API
+- Google Gemini example: `gemini-embedding-001`
 
-### `ARK_API_KEY`
+Legacy alias:
+
+- `EMBEDDER`
+
+### `EMBEDDING_API_KEY`
 
 - Purpose: bearer token for the external embedding API
+
+Legacy alias:
+
+- `ARK_API_KEY`
 
 ### `EMBEDDING_TIMEOUT_SECONDS`
 
@@ -77,7 +121,7 @@ export FRONTEND_ORIGINS="http://127.0.0.1:3000,http://localhost:3000"
 ### `VECTOR_DENSE_DIMENSION`
 
 - Purpose: dense embedding dimension written to Milvus
-- Default: `2560`
+- Default: `3072`
 
 ### `VECTOR_SPARSE_DIMENSION`
 
@@ -99,6 +143,10 @@ export NUXT_PUBLIC_API_BASE="http://127.0.0.1:8000/api/v1"
 
 ## Operational Guidance
 
+- backend reads local settings from `backend/.env`
+- start from `backend/.env.example` and copy it to `backend/.env`
+- backend writes structured JSON logs to `backend/logs/application.log` and `backend/logs/error.log`
+- file logs rotate daily and retain the most recent `LOG_RETENTION_DAYS` archives
 - local development can run without PostgreSQL or Milvus
 - local vector search needs PostgreSQL, Redis, and Milvus available together
 - production should run PostgreSQL for metadata and chunk storage

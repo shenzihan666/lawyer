@@ -43,17 +43,8 @@ function handleNavigate() {
     <aside
       class="flex h-full w-[264px] flex-col border-r border-[#ebe5da] bg-[#f7f4ee] shadow-xl shadow-zinc-950/5 md:shadow-none"
     >
-      <div class="flex items-center justify-end px-4 pb-4 pt-6">
+      <div class="flex items-center justify-end px-4 pb-4 pt-6 md:hidden">
         <UButton
-          class="hidden md:inline-flex"
-          icon="i-lucide-panel-left-close"
-          color="neutral"
-          variant="ghost"
-          @click="uiStore.toggleSidebar()"
-        />
-
-        <UButton
-          class="md:hidden"
           icon="i-lucide-x"
           color="neutral"
           variant="ghost"

@@ -120,7 +120,9 @@ class MilvusVectorIndex:
                 strict=True,
             )
         ]
-        self._get_client().insert(self.settings.milvus_collection, payload)
+        client = self._get_client()
+        client.insert(self.settings.milvus_collection, payload)
+        client.flush(collection_name=self.settings.milvus_collection)
 
     def replace_leaf_chunks(
         self,
@@ -153,7 +155,9 @@ class MilvusVectorIndex:
                 strict=True,
             )
         ]
-        self._get_client().insert(self.settings.milvus_collection, payload)
+        client = self._get_client()
+        client.insert(self.settings.milvus_collection, payload)
+        client.flush(collection_name=self.settings.milvus_collection)
 
     def search(
         self,

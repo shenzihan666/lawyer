@@ -14,6 +14,13 @@ Backend:
 uv sync --directory backend --group dev
 ```
 
+Backend env file:
+
+```bash
+cd backend
+cp .env.example .env
+```
+
 ## Run Locally
 
 Backend:
@@ -31,7 +38,7 @@ UVICORN_RELOAD=true uv run --directory backend backend
 Infrastructure stack:
 
 ```bash
-docker compose up -d postgres redis etcd minio standalone
+docker compose up -d postgres redis etcd minio standalone attu
 ```
 
 Frontend:
@@ -72,5 +79,7 @@ backend/.venv/bin/pre-commit run --hook-stage pre-push --all-files -c .pre-commi
 
 - backend expects PostgreSQL in `DATABASE_URL`
 - uploads default to `backend/uploads/`
+- structured logs default to `backend/logs/`
 - API default expected by frontend is `http://127.0.0.1:8000/api/v1`
 - vector retrieval defaults expect Redis on `6379` and Milvus on `19530`
+- Attu UI is exposed at `http://127.0.0.1:8080`

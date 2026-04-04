@@ -38,6 +38,19 @@ export type DocumentResponse = {
   affected_ids?: string[];
 };
 
+export type VectorizationProgress = {
+  active: boolean;
+  document_ids: string[];
+  total: number;
+  completed: number;
+  indexed: number;
+  failed: number;
+  indexing: number;
+  queued: number;
+  percent: number;
+  label: string;
+};
+
 export const useDocumentStore = defineStore("documents", () => {
   const runtimeConfig = useRuntimeConfig();
   const apiBase = runtimeConfig.public.apiBase as string;
@@ -59,7 +72,22 @@ export const useDocumentStore = defineStore("documents", () => {
     deleted: 0,
   });
 
+  const vectorizationProgress = reactive<VectorizationProgress>({
+    active: false,
+    document_ids: [],
+    total: 0,
+    completed: 0,
+    indexed: 0,
+    failed: 0,
+    indexing: 0,
+    queued: 0,
+    percent: 0,
+    label: "",
+  });
+
   const toast = useToast();
+  let vectorizationPollTimer: ReturnType<typeof setInterval> | null = null;
+  let vectorizationResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   const hasSelection = computed(() => selectedIds.value.length > 0);
 
@@ -102,27 +130,177 @@ export const useDocumentStore = defineStore("documents", () => {
     return await $fetch<T>(`${apiBase}${path}`, options);
   }
 
-  async function refreshDocuments() {
-    isLoading.value = true;
+  function clearVectorizationPollTimer() {
+    if (!vectorizationPollTimer) return;
+    clearInterval(vectorizationPollTimer);
+    vectorizationPollTimer = null;
+  }
+
+  function clearVectorizationResetTimer() {
+    if (!vectorizationResetTimer) return;
+    clearTimeout(vectorizationResetTimer);
+    vectorizationResetTimer = null;
+  }
+
+  function resetVectorizationProgress() {
+    clearVectorizationPollTimer();
+    clearVectorizationResetTimer();
+
+    vectorizationProgress.active = false;
+    vectorizationProgress.document_ids = [];
+    vectorizationProgress.total = 0;
+    vectorizationProgress.completed = 0;
+    vectorizationProgress.indexed = 0;
+    vectorizationProgress.failed = 0;
+    vectorizationProgress.indexing = 0;
+    vectorizationProgress.queued = 0;
+    vectorizationProgress.percent = 0;
+    vectorizationProgress.label = "";
+  }
+
+  function updateVectorizationProgress() {
+    if (!vectorizationProgress.document_ids.length) return;
+
+    let indexed = 0;
+    let failed = 0;
+    let indexing = 0;
+    let queued = 0;
+
+    for (const id of vectorizationProgress.document_ids) {
+      const document = documents.value.find((item) => item.id === id);
+      if (!document) continue;
+
+      switch (document.vector_status) {
+        case "indexed":
+          indexed += 1;
+          break;
+        case "failed":
+          failed += 1;
+          break;
+        case "indexing":
+          indexing += 1;
+          break;
+        case "queued":
+          queued += 1;
+          break;
+      }
+    }
+
+    const completed = indexed + failed;
+    const total = Math.max(vectorizationProgress.total, 1);
+    const weightedCompleted = completed + indexing * 0.65 + queued * 0.2;
+
+    vectorizationProgress.completed = completed;
+    vectorizationProgress.indexed = indexed;
+    vectorizationProgress.failed = failed;
+    vectorizationProgress.indexing = indexing;
+    vectorizationProgress.queued = queued;
+    vectorizationProgress.percent =
+      completed >= vectorizationProgress.total
+        ? 100
+        : Math.min(99, Math.max(8, Math.round((weightedCompleted / total) * 100)));
+
+    if (completed >= vectorizationProgress.total) {
+      vectorizationProgress.label =
+        failed > 0 ? "Indexing finished with failures" : "Indexing finished";
+      return;
+    }
+
+    if (indexing > 0) {
+      vectorizationProgress.label = "Embedding and indexing document chunks";
+      return;
+    }
+
+    if (queued > 0) {
+      vectorizationProgress.label = "Queued and preparing document chunks";
+      return;
+    }
+
+    vectorizationProgress.label = "Starting vectorization";
+  }
+
+  function scheduleVectorizationProgressReset() {
+    clearVectorizationResetTimer();
+    vectorizationResetTimer = setTimeout(() => {
+      resetVectorizationProgress();
+    }, 1600);
+  }
+
+  function startVectorizationTracking(ids: string[]) {
+    clearVectorizationPollTimer();
+    clearVectorizationResetTimer();
+
+    const uniqueIds = [...new Set(ids)];
+    vectorizationProgress.active = true;
+    vectorizationProgress.document_ids = uniqueIds;
+    vectorizationProgress.total = uniqueIds.length;
+    vectorizationProgress.completed = 0;
+    vectorizationProgress.indexed = 0;
+    vectorizationProgress.failed = 0;
+    vectorizationProgress.indexing = 0;
+    vectorizationProgress.queued = 0;
+    vectorizationProgress.percent = 8;
+    vectorizationProgress.label = "Starting vectorization";
+    updateVectorizationProgress();
+
+    vectorizationPollTimer = setInterval(() => {
+      void fetchDocuments({ showLoading: false, toastOnError: false }).catch(
+        () => undefined,
+      );
+    }, 1200);
+  }
+
+  function finishVectorizationTracking() {
+    vectorizationProgress.active = false;
+    clearVectorizationPollTimer();
+    scheduleVectorizationProgressReset();
+  }
+
+  async function fetchDocuments(options?: {
+    showLoading?: boolean;
+    toastOnError?: boolean;
+  }) {
+    const showLoading = options?.showLoading ?? true;
+    const toastOnError = options?.toastOnError ?? true;
+
+    if (showLoading) {
+      isLoading.value = true;
+    }
+
     try {
       const payload = await request<DocumentResponse>("/documents");
       applyResponse(payload);
+      updateVectorizationProgress();
+      return payload;
     } catch (error) {
-      toast.add({
-        title: "加载失败",
-        description: String(error),
-        color: "error",
-      });
+      if (toastOnError) {
+        toast.add({
+          title: "Load failed",
+          description: String(error),
+          color: "error",
+        });
+      }
+      throw error;
     } finally {
-      isLoading.value = false;
+      if (showLoading) {
+        isLoading.value = false;
+      }
+    }
+  }
+
+  async function refreshDocuments() {
+    try {
+      await fetchDocuments();
+    } catch {
+      return;
     }
   }
 
   async function uploadDocuments() {
     if (!stagedFiles.value.length) {
       toast.add({
-        title: "提示",
-        description: "请先选择至少一个文档",
+        title: "Select documents",
+        description: "Choose at least one file before uploading.",
         color: "warning",
       });
       return;
@@ -143,13 +321,13 @@ export const useDocumentStore = defineStore("documents", () => {
       stagedFiles.value = [];
       selectedIds.value = [];
       toast.add({
-        title: "上传成功",
-        description: `已导入 ${payload.affected_ids?.length ?? 0} 个文档`,
+        title: "Upload complete",
+        description: `Imported ${payload.affected_ids?.length ?? 0} document(s).`,
         color: "success",
       });
     } catch (error) {
       toast.add({
-        title: "导入失败",
+        title: "Upload failed",
         description: String(error),
         color: "error",
       });
@@ -160,22 +338,32 @@ export const useDocumentStore = defineStore("documents", () => {
 
   async function queueVectorization(ids: string[]) {
     if (!ids.length) return;
+
     isWorking.value = true;
+    startVectorizationTracking(ids);
+
     try {
       const payload = await request<DocumentResponse>("/documents/vectorize", {
         method: "POST",
         body: { document_ids: ids },
       });
       applyResponse(payload);
+      updateVectorizationProgress();
+      finishVectorizationTracking();
       selectedIds.value = selectedIds.value.filter((id) => !ids.includes(id));
       toast.add({
-        title: "操作成功",
-        description: `已完成 ${payload.affected_ids?.length ?? 0} 个文档的向量索引`,
+        title: "Indexing complete",
+        description: `Processed ${payload.affected_ids?.length ?? 0} document(s).`,
         color: "success",
       });
     } catch (error) {
+      void fetchDocuments({ showLoading: false, toastOnError: false }).catch(
+        () => undefined,
+      );
+      vectorizationProgress.label = "Indexing request failed";
+      finishVectorizationTracking();
       toast.add({
-        title: "操作失败",
+        title: "Indexing failed",
         description: String(error),
         color: "error",
       });
@@ -186,6 +374,7 @@ export const useDocumentStore = defineStore("documents", () => {
 
   async function deleteDocuments(ids: string[]) {
     if (!ids.length) return;
+
     isWorking.value = true;
     try {
       const payload = await request<DocumentResponse>("/documents/delete", {
@@ -195,13 +384,13 @@ export const useDocumentStore = defineStore("documents", () => {
       applyResponse(payload);
       selectedIds.value = selectedIds.value.filter((id) => !ids.includes(id));
       toast.add({
-        title: "已删除",
-        description: `成功删除 ${payload.affected_ids?.length ?? 0} 个文档`,
+        title: "Deleted",
+        description: `Removed ${payload.affected_ids?.length ?? 0} document(s).`,
         color: "success",
       });
     } catch (error) {
       toast.add({
-        title: "删除失败",
+        title: "Delete failed",
         description: String(error),
         color: "error",
       });
@@ -216,6 +405,7 @@ export const useDocumentStore = defineStore("documents", () => {
     selectedIds,
     isLoading,
     isWorking,
+    vectorizationProgress,
     summary,
     hasSelection,
     refreshDocuments,

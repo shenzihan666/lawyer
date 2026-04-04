@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useUiStore } from "../../stores/ui";
+
+const uiStore = useUiStore();
 const draft = ref("");
 </script>
 
@@ -8,7 +11,10 @@ const draft = ref("");
       class="relative flex items-center border-b border-[#ebe5da] px-4 py-4 md:px-5"
     >
       <div class="flex items-center gap-2 text-zinc-900">
-        <button class="rounded-xl p-2 transition-colors hover:bg-white">
+        <button
+          class="rounded-xl p-2 transition-colors hover:bg-white"
+          @click="uiStore.toggleSidebar()"
+        >
           <UIcon name="i-lucide-panels-left-right" class="h-5 w-5" />
         </button>
         <button class="rounded-xl p-2 transition-colors hover:bg-white">

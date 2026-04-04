@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime, timezone
+import logging
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
@@ -23,6 +24,8 @@ from app.services.documents.storage import UploadStorage
 from app.services.loaders import registry
 from app.services.loaders.base import DocumentLoadError, UnsupportedDocumentTypeError
 from app.services.vectors import DocumentVectorService
+
+logger = logging.getLogger(__name__)
 
 
 def utcnow() -> datetime:
@@ -77,6 +80,17 @@ class DocumentService:
                 ) from exc
 
             stored_file = self.storage.save(upload)
+            logger.info(
+                "Stored upload",
+                extra={
+                    "event": "document_upload_stored",
+                    "document_id": stored_file.document_id,
+                    "original_filename": stored_file.original_filename,
+                    "file_extension": stored_file.file_extension,
+                    "loader_name": loader_name,
+                    "file_size": stored_file.file_size,
+                },
+            )
             document = DocumentAsset(
                 id=stored_file.document_id,
                 original_filename=stored_file.original_filename,
@@ -104,10 +118,27 @@ class DocumentService:
                 document.ingestion_status = DocumentIngestionStatus.failed.value
                 document.failure_reason = str(exc)
                 document.updated_at = utcnow()
+                logger.warning(
+                    "Document ingestion failed",
+                    extra={
+                        "event": "document_ingestion_failed",
+                        "document_id": document.id,
+                        "original_filename": document.original_filename,
+                        "reason": str(exc),
+                    },
+                )
             except Exception as exc:
                 document.ingestion_status = DocumentIngestionStatus.failed.value
                 document.failure_reason = f"Unexpected loader failure: {exc}"
                 document.updated_at = utcnow()
+                logger.exception(
+                    "Unexpected document loader failure",
+                    extra={
+                        "event": "document_ingestion_failed",
+                        "document_id": document.id,
+                        "original_filename": document.original_filename,
+                    },
+                )
             else:
                 document.loader_name = load_result.loader_name
                 document.raw_doc_count = len(load_result.fragments)
@@ -131,6 +162,16 @@ class DocumentService:
                             fragment_metadata=fragment.metadata,
                         )
                     )
+                logger.info(
+                    "Document ingested",
+                    extra={
+                        "event": "document_ingested",
+                        "document_id": document.id,
+                        "original_filename": document.original_filename,
+                        "raw_doc_count": document.raw_doc_count,
+                        "page_count": document.page_count,
+                    },
+                )
 
             self.db.commit()
             self.db.refresh(document)
@@ -151,6 +192,13 @@ class DocumentService:
     def queue_vectorization(
         self, document_ids: Sequence[str]
     ) -> DocumentOperationResponse:
+        logger.info(
+            "Vectorization requested",
+            extra={
+                "event": "document_vectorization_requested",
+                "requested_count": len(document_ids),
+            },
+        )
         documents = self._fetch_documents(include_deleted=True)
         selected = {document.id: document for document in documents}
         affected_ids: list[str] = []
@@ -168,6 +216,14 @@ class DocumentService:
 
         self.db.commit()
         indexed_ids = self.vector_service.index_documents(affected_ids)
+        logger.info(
+            "Vectorization completed",
+            extra={
+                "event": "document_vectorization_completed",
+                "queued_count": len(affected_ids),
+                "indexed_count": len(indexed_ids),
+            },
+        )
         documents = self._fetch_documents(include_deleted=True)
         active_items = [
             self._to_item(document)
@@ -183,6 +239,13 @@ class DocumentService:
     def soft_delete_documents(
         self, document_ids: Sequence[str]
     ) -> DocumentOperationResponse:
+        logger.info(
+            "Document deletion requested",
+            extra={
+                "event": "document_delete_requested",
+                "requested_count": len(document_ids),
+            },
+        )
         documents = self._fetch_documents(include_deleted=True)
         selected = {document.id: document for document in documents}
         affected_ids: list[str] = []
@@ -200,6 +263,13 @@ class DocumentService:
         self.db.commit()
         self.vector_service.delete_document_vectors(affected_ids)
         self.db.commit()
+        logger.info(
+            "Documents soft deleted",
+            extra={
+                "event": "document_deleted",
+                "deleted_count": len(affected_ids),
+            },
+        )
         documents = self._fetch_documents(include_deleted=True)
         active_items = [
             self._to_item(document)

@@ -1,6 +1,7 @@
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime, timezone
+import logging
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -19,6 +20,8 @@ from app.services.vectors.embeddings import (
 from app.services.vectors.milvus import MilvusVectorIndex
 from app.services.vectors.store import DocumentChunkStore
 
+logger = logging.getLogger(__name__)
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -35,6 +38,13 @@ class DocumentVectorService:
         self.milvus = MilvusVectorIndex(settings)
 
     def index_documents(self, document_ids: Sequence[str]) -> list[str]:
+        logger.info(
+            "Indexing documents",
+            extra={
+                "event": "vector_indexing_started",
+                "requested_count": len(document_ids),
+            },
+        )
         documents = list(
             self.db.scalars(
                 select(DocumentAsset)
@@ -53,6 +63,14 @@ class DocumentVectorService:
             document.vector_status = DocumentVectorStatus.indexing.value
             document.updated_at = utcnow()
             self.db.commit()
+            logger.info(
+                "Document indexing started",
+                extra={
+                    "event": "document_indexing_started",
+                    "document_id": document.id,
+                    "original_filename": document.original_filename,
+                },
+            )
 
             try:
                 chunks = build_document_chunks(document, self.settings)
@@ -64,7 +82,7 @@ class DocumentVectorService:
                 dense_embeddings = self.dense_embedding_service.embed_texts(
                     [chunk.content for chunk in leaf_chunks]
                 )
-                self.chunk_store.attach_dense_embeddings(
+                attached_count = self.chunk_store.attach_dense_embeddings(
                     document.id,
                     {
                         chunk.chunk_id: embedding
@@ -75,10 +93,20 @@ class DocumentVectorService:
                         )
                     },
                 )
+                if attached_count != len(leaf_chunks):
+                    raise RuntimeError(
+                        "Dense embeddings were not attached to all leaf chunks"
+                    )
+
+                cleaned_trace_metadata = {
+                    key: value
+                    for key, value in (document.trace_metadata or {}).items()
+                    if key != "vector_error"
+                }
 
                 document.vector_status = DocumentVectorStatus.indexed.value
                 document.trace_metadata = {
-                    **document.trace_metadata,
+                    **cleaned_trace_metadata,
                     "vector_indexed_at": utcnow().isoformat(),
                     "vector_chunk_counts": {
                         "total": len(chunks),
@@ -87,12 +115,30 @@ class DocumentVectorService:
                     },
                 }
                 affected_ids.append(document.id)
+                logger.info(
+                    "Document indexed",
+                    extra={
+                        "event": "document_indexed",
+                        "document_id": document.id,
+                        "original_filename": document.original_filename,
+                        "chunk_count": len(chunks),
+                        "leaf_chunk_count": len(leaf_chunks),
+                    },
+                )
             except Exception as exc:
                 document.vector_status = DocumentVectorStatus.failed.value
                 document.trace_metadata = {
                     **document.trace_metadata,
                     "vector_error": str(exc),
                 }
+                logger.exception(
+                    "Document indexing failed",
+                    extra={
+                        "event": "document_indexing_failed",
+                        "document_id": document.id,
+                        "original_filename": document.original_filename,
+                    },
+                )
 
             document.updated_at = utcnow()
             self.chunk_store.invalidate_search_cache()
@@ -103,6 +149,13 @@ class DocumentVectorService:
             try:
                 self._rebuild_vector_index()
             except Exception as exc:
+                logger.exception(
+                    "Vector index rebuild failed",
+                    extra={
+                        "event": "vector_rebuild_failed",
+                        "document_count": len(affected_ids),
+                    },
+                )
                 failed_documents = list(
                     self.db.scalars(
                         select(DocumentAsset).where(DocumentAsset.id.in_(affected_ids))
@@ -118,6 +171,13 @@ class DocumentVectorService:
                 self.db.commit()
                 return []
 
+        logger.info(
+            "Indexing finished",
+            extra={
+                "event": "vector_indexing_finished",
+                "indexed_count": len(affected_ids),
+            },
+        )
         return affected_ids
 
     def delete_document_vectors(self, document_ids: Sequence[str]) -> None:
@@ -125,13 +185,34 @@ class DocumentVectorService:
         if not document_id_list:
             return
 
+        logger.info(
+            "Deleting document vectors",
+            extra={
+                "event": "vector_delete_started",
+                "document_count": len(document_id_list),
+            },
+        )
         self.chunk_store.delete_document_chunks(document_id_list)
         self.chunk_store.invalidate_search_cache()
         self.chunk_store.invalidate_bm25_stats()
         try:
             self._rebuild_vector_index()
         except Exception:
+            logger.exception(
+                "Vector index rebuild failed after delete",
+                extra={
+                    "event": "vector_delete_rebuild_failed",
+                    "document_count": len(document_id_list),
+                },
+            )
             return
+        logger.info(
+            "Document vectors deleted",
+            extra={
+                "event": "vector_delete_finished",
+                "document_count": len(document_id_list),
+            },
+        )
 
     def search(
         self,
@@ -155,6 +236,15 @@ class DocumentVectorService:
         }
         cached = self.chunk_store.get_cached_search(cache_payload)
         if cached is not None:
+            logger.info(
+                "Search served from cache",
+                extra={
+                    "event": "vector_search_cache_hit",
+                    "query_length": len(normalized_query),
+                    "top_k": effective_top_k,
+                    "document_filter_count": len(selected_document_ids),
+                },
+            )
             return SearchResponse.model_validate(cached)
 
         corpus_stats = self.chunk_store.get_bm25_stats()
@@ -203,6 +293,17 @@ class DocumentVectorService:
             },
         )
         self.chunk_store.set_cached_search(cache_payload, response.model_dump())
+        logger.info(
+            "Search completed",
+            extra={
+                "event": "vector_search_completed",
+                "query_length": len(normalized_query),
+                "top_k": effective_top_k,
+                "document_filter_count": len(selected_document_ids),
+                "result_count": len(response.items),
+                "retrieval_mode": retrieval_mode,
+            },
+        )
         return response
 
     def _auto_merge_documents(
@@ -313,6 +414,13 @@ class DocumentVectorService:
             chunks=leaf_chunks,
             dense_embeddings=dense_embeddings,
             sparse_embeddings=sparse_embeddings,
+        )
+        logger.info(
+            "Vector index rebuilt",
+            extra={
+                "event": "vector_index_rebuilt",
+                "leaf_chunk_count": len(leaf_chunks),
+            },
         )
 
     @staticmethod

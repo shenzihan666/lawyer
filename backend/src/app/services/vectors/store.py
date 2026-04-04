@@ -62,14 +62,20 @@ class DocumentChunkStore:
                 for chunk in chunks
             ]
         )
+        # The session uses autoflush=False, so the newly added chunks must be
+        # flushed explicitly before later queries in the same transaction.
+        self.db.flush()
 
     def attach_dense_embeddings(
         self,
         document_id: str,
         embeddings_by_chunk_id: dict[str, list[float]],
-    ) -> None:
+    ) -> int:
         if not embeddings_by_chunk_id:
-            return
+            return 0
+
+        # Ensure pending chunk inserts are queryable in the current transaction.
+        self.db.flush()
 
         rows = list(
             self.db.scalars(
@@ -85,6 +91,8 @@ class DocumentChunkStore:
                 "dense_embedding": embeddings_by_chunk_id[row.chunk_id],
             }
             self.cache.delete(self._cache_key(row.chunk_id))
+        self.db.flush()
+        return len(rows)
 
     def get_chunks_by_ids(self, chunk_ids: Sequence[str]) -> list[dict]:
         if not chunk_ids:

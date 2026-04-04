@@ -37,27 +37,35 @@ def tokenize_text(text: str) -> list[str]:
 
 
 class ExternalEmbeddingService:
+    _provider_max_batch_size = 100
+
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
     def _embedding_endpoint(self) -> str:
-        if not self.settings.base_url:
-            raise RuntimeError("BASE_URL is required for external embedding")
-        return f"{self.settings.base_url.rstrip('/')}/embeddings"
+        if not self.settings.embedding_base_url:
+            raise RuntimeError(
+                "EMBEDDING_BASE_URL (or BASE_URL) is required for external embedding"
+            )
+        return f"{self.settings.embedding_base_url.rstrip('/')}/embeddings"
 
     def _embedding_headers(self) -> dict[str, str]:
-        if not self.settings.ark_api_key:
-            raise RuntimeError("ARK_API_KEY is required for external embedding")
+        if not self.settings.embedding_api_key:
+            raise RuntimeError(
+                "EMBEDDING_API_KEY (or ARK_API_KEY) is required for external embedding"
+            )
         return {
-            "Authorization": f"Bearer {self.settings.ark_api_key}",
+            "Authorization": f"Bearer {self.settings.embedding_api_key}",
             "Content-Type": "application/json",
         }
 
     def _embedding_payload(self, texts: Sequence[str]) -> bytes:
-        if not self.settings.embedder:
-            raise RuntimeError("EMBEDDER is required for external embedding")
+        if not self.settings.embedding_model:
+            raise RuntimeError(
+                "EMBEDDING_MODEL (or EMBEDDER) is required for external embedding"
+            )
         payload = {
-            "model": self.settings.embedder,
+            "model": self.settings.embedding_model,
             "input": list(texts),
             "encoding_format": "float",
         }
@@ -79,10 +87,13 @@ class ExternalEmbeddingService:
     def embed_text(self, text: str) -> list[float]:
         return self.embed_texts([text])[0]
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        if not texts:
-            return []
+    def _effective_batch_size(self) -> int:
+        configured_batch_size = self.settings.embedding_batch_size
+        if configured_batch_size < 1:
+            raise RuntimeError("EMBEDDING_BATCH_SIZE must be greater than 0")
+        return min(configured_batch_size, self._provider_max_batch_size)
 
+    def _request_embeddings(self, texts: Sequence[str]) -> list[list[float]]:
         req = request.Request(
             self._embedding_endpoint(),
             data=self._embedding_payload(texts),
@@ -94,7 +105,7 @@ class ExternalEmbeddingService:
                 req,
                 timeout=self.settings.embedding_timeout_seconds,
             ) as response:
-                return self._parse_embedding_response(response.read())
+                embeddings = self._parse_embedding_response(response.read())
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
             raise RuntimeError(
@@ -102,6 +113,23 @@ class ExternalEmbeddingService:
             ) from exc
         except error.URLError as exc:
             raise RuntimeError(f"Embedding API request failed: {exc.reason}") from exc
+
+        if len(embeddings) != len(texts):
+            raise RuntimeError(
+                "Embedding API returned an unexpected number of embeddings"
+            )
+        return embeddings
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+
+        batch_size = self._effective_batch_size()
+        embeddings: list[list[float]] = []
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start : start + batch_size]
+            embeddings.extend(self._request_embeddings(batch))
+        return embeddings
 
 
 class BM25SparseEmbeddingService:
