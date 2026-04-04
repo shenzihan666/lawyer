@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
 from urllib import error, request
@@ -135,12 +135,316 @@ class DocumentAnswerService:
                 generation_error=str(exc),
             )
 
+    def stream_answer(
+        self,
+        query: str,
+        top_k: int | None = None,
+        document_ids: Sequence[str] | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        normalized_query = query.strip()
+        if not normalized_query:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Query must not be empty.",
+            )
+
+        effective_top_k = top_k or self.settings.vector_search_top_k
+        selected_document_ids = [item for item in (document_ids or []) if item]
+
+        search_response = yield from self.vector_service.search_stream(
+            query=normalized_query,
+            top_k=top_k,
+            document_ids=document_ids,
+        )
+        yield {"type": "trace", "rag_trace": search_response.meta}
+
+        sources = search_response.items[: self.settings.answer_generation_max_context_items]
+
+        if not sources:
+            response = self._build_no_results_response(search_response.meta)
+            yield self._stream_step(
+                key="search-empty",
+                label="没有检索到可用证据",
+                detail="可以尝试换一种问法，或放宽文档筛选范围。",
+                status="done",
+            )
+            yield from self._emit_response(response)
+            return
+
+        if not self.settings.answer_generation_enabled:
+            response = self._build_extractive_fallback(
+                query=normalized_query,
+                sources=sources,
+                search_meta=search_response.meta,
+                skipped_reason="answer_generation_disabled",
+            )
+            yield self._stream_step(
+                key="answer-fallback",
+                label="回答模型已关闭",
+                detail="当前改为返回证据摘要。",
+                status="done",
+            )
+            yield from self._emit_response(response)
+            return
+
+        if not self.is_configured():
+            response = self._build_extractive_fallback(
+                query=normalized_query,
+                sources=sources,
+                search_meta=search_response.meta,
+                skipped_reason="answer_model_not_configured",
+            )
+            yield self._stream_step(
+                key="answer-fallback",
+                label="回答模型未配置",
+                detail="当前改为返回证据摘要。",
+                status="done",
+            )
+            yield from self._emit_response(response)
+            return
+
+        yield self._stream_step(
+            key="answer-generate",
+            label="开始生成回答",
+            detail=f"基于 {len(sources)} 条证据进行流式输出。",
+        )
+
+        answer_text = ""
+        has_streamed_content = False
+
+        try:
+            for chunk in self._chat_completion_stream_text(
+                system_prompt=(
+                    "你是法律知识库问答助手。"
+                    "你必须严格依据给定来源作答，不能编造法条、案号、事实或结论。"
+                    "请直接输出中文回答正文，不要输出 JSON。"
+                    "需要把引用编号直接放在对应句子后面，格式为 [1][2]。"
+                    "如果信息不足，请明确说明信息不足。"
+                ),
+                user_prompt=(
+                    "用户问题如下：\n"
+                    f"{normalized_query}\n\n"
+                    "可用来源如下：\n"
+                    f"{self._format_sources(sources)}\n\n"
+                    "要求：\n"
+                    "1. 只能使用给定来源编号。\n"
+                    "2. 优先直接回答，再说明依据。\n"
+                    "3. 不要输出与答案无关的前言或解释。\n"
+                ),
+            ):
+                if not chunk:
+                    continue
+                has_streamed_content = True
+                answer_text += chunk
+                yield {"type": "content", "content": chunk}
+        except Exception as exc:
+            if has_streamed_content:
+                yield self._stream_step(
+                    key="answer-stream-failed",
+                    label="流式回答中断",
+                    detail=str(exc),
+                    status="error",
+                )
+                yield {"type": "error", "content": str(exc)}
+                return
+
+            logger.warning(
+                "Streaming answer generation failed before first token; retrying non-stream answer",
+                extra={
+                    "event": "answer_generation_stream_failed",
+                    "query_length": len(normalized_query),
+                    "top_k": effective_top_k,
+                    "document_filter_count": len(selected_document_ids),
+                    "error": str(exc),
+                },
+            )
+            yield self._stream_step(
+                key="answer-retry",
+                label="流式生成失败，重试非流式回答",
+                detail=str(exc),
+                status="error",
+            )
+
+            try:
+                draft = self._generate_grounded_answer(normalized_query, sources)
+            except Exception as retry_exc:
+                logger.warning(
+                    "Non-stream answer retry failed; returning extractive fallback",
+                    extra={
+                        "event": "answer_generation_retry_failed",
+                        "query_length": len(normalized_query),
+                        "top_k": effective_top_k,
+                        "document_filter_count": len(selected_document_ids),
+                        "stream_error": str(exc),
+                        "retry_error": str(retry_exc),
+                    },
+                )
+                response = self._build_extractive_fallback(
+                    query=normalized_query,
+                    sources=sources,
+                    search_meta=search_response.meta,
+                    skipped_reason="answer_generation_failed",
+                    generation_error=str(retry_exc),
+                )
+                yield self._stream_step(
+                    key="answer-fallback",
+                    label="生成回答失败，改用证据摘要",
+                    detail=str(retry_exc),
+                    status="error",
+                )
+                yield from self._emit_response(response)
+                return
+
+            citations = self._build_citations(
+                sources,
+                draft.used_source_numbers,
+                draft.answer,
+            )
+            retry_answer_text = draft.answer.strip()
+            if citations and not self._extract_citation_numbers(retry_answer_text):
+                retry_answer_text = (
+                    f"{retry_answer_text}\n\n参考依据："
+                    + "".join(f"[{citation.citation_number}]" for citation in citations)
+                )
+
+            response = AnswerResponse(
+                answer=retry_answer_text,
+                citations=citations,
+                meta={
+                    "generation_mode": "llm_retry",
+                    "grounding_status": draft.grounding_status,
+                    "missing_information": draft.missing_information,
+                    "used_source_count": len(citations),
+                    "answer_generation_enabled": True,
+                    "answer_generation_configured": True,
+                    "answer_generation_skipped_reason": None,
+                    "answer_generation_error": str(exc),
+                    "search_meta": search_response.meta,
+                },
+            )
+            yield self._stream_step(
+                key="answer-retry-success",
+                label="已切换为非流式回答",
+                detail="流式接口异常，已用单次生成完成回答。",
+                status="done",
+            )
+            yield from self._emit_response(response)
+            return
+
+        answer_text = answer_text.strip()
+        if not answer_text:
+            response = self._build_extractive_fallback(
+                query=normalized_query,
+                sources=sources,
+                search_meta=search_response.meta,
+                skipped_reason="answer_generation_failed",
+                generation_error="Answer model returned empty answer",
+            )
+            yield self._stream_step(
+                key="answer-fallback",
+                label="回答为空，改用证据摘要",
+                detail="Answer model returned empty answer",
+                status="error",
+            )
+            yield from self._emit_response(response)
+            return
+
+        used_source_numbers = self._extract_citation_numbers(answer_text)
+        if not used_source_numbers:
+            used_source_numbers = [1]
+            suffix = "\n\n参考依据：[1]"
+            answer_text += suffix
+            yield {"type": "content", "content": suffix}
+
+        citations = self._build_citations(
+            sources,
+            used_source_numbers,
+            answer_text,
+        )
+
+        response = AnswerResponse(
+            answer=answer_text,
+            citations=citations,
+            meta={
+                "generation_mode": "llm_stream",
+                "grounding_status": "grounded" if citations else "partial",
+                "missing_information": "",
+                "used_source_count": len(citations),
+                "answer_generation_enabled": True,
+                "answer_generation_configured": True,
+                "answer_generation_skipped_reason": None,
+                "answer_generation_error": None,
+                "search_meta": search_response.meta,
+            },
+        )
+        yield self._stream_step(
+            key="answer-complete",
+            label="回答生成完成",
+            detail=f"整理出 {len(citations)} 条引用。",
+            status="done",
+        )
+        yield {"type": "result", **response.model_dump()}
+
     def is_configured(self) -> bool:
         return bool(
             self.settings.answer_generation_base_url
             and self.settings.answer_generation_model
             and self.settings.answer_generation_api_key
         )
+
+    def _build_no_results_response(self, search_meta: dict[str, Any]) -> AnswerResponse:
+        return AnswerResponse(
+            answer=(
+                "未检索到可支持回答的依据。请尝试换一种问法，"
+                "或放宽文档筛选范围后重新提问。"
+            ),
+            citations=[],
+            meta={
+                "generation_mode": "no_results",
+                "grounding_status": "insufficient",
+                "used_source_count": 0,
+                "answer_generation_enabled": self.settings.answer_generation_enabled,
+                "answer_generation_configured": self.is_configured(),
+                "answer_generation_skipped_reason": "no_retrieval_results",
+                "answer_generation_error": None,
+                "search_meta": search_meta,
+            },
+        )
+
+    def _stream_step(
+        self,
+        *,
+        key: str,
+        label: str,
+        detail: str | None = None,
+        status: str = "running",
+    ) -> dict[str, Any]:
+        return {
+            "type": "rag_step",
+            "step": {
+                "key": key,
+                "label": label,
+                "detail": detail or "",
+                "status": status,
+            },
+        }
+
+    def _emit_response(self, response: AnswerResponse) -> Iterator[dict[str, Any]]:
+        for chunk in self._iter_text_chunks(response.answer):
+            yield {"type": "content", "content": chunk}
+        yield {"type": "result", **response.model_dump()}
+
+    def _iter_text_chunks(self, text: str, chunk_size: int = 56) -> Iterator[str]:
+        normalized = (text or "").strip()
+        if not normalized:
+            return
+
+        segments = re.split(r"(?<=[。！？\n])", normalized)
+        for segment in segments:
+            if not segment:
+                continue
+            for index in range(0, len(segment), chunk_size):
+                yield segment[index : index + chunk_size]
 
     def _generate_grounded_answer(
         self,
@@ -214,11 +518,17 @@ class DocumentAnswerService:
             list(range(1, min(len(sources), 2) + 1)),
             "",
         )
-        lead = (
-            "当前答案模型不可用，先返回最相关依据摘要。"
-            if generation_error or skipped_reason != "answer_model_not_configured"
-            else "当前还没有配置答案模型，先返回最相关依据摘要。"
-        )
+        error_text = (generation_error or "").lower()
+        if "timed out" in error_text:
+            lead = "当前答案模型响应超时，先返回最相关依据摘要。"
+        elif generation_error:
+            lead = "当前答案模型暂时不可用，先返回最相关依据摘要。"
+        elif skipped_reason == "answer_model_not_configured":
+            lead = "当前还没有配置答案模型，先返回最相关依据摘要。"
+        elif skipped_reason == "answer_generation_disabled":
+            lead = "当前已关闭答案生成，先返回最相关依据摘要。"
+        else:
+            lead = "当前答案模型不可用，先返回最相关依据摘要。"
         lines = [lead, "", f"问题：{query}", ""]
         for citation in citations:
             lines.append(
@@ -323,6 +633,83 @@ class DocumentAnswerService:
             ) from exc
 
         return self._parse_chat_completion_response(body)
+
+    def _chat_completion_stream_text(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> Iterator[str]:
+        payload = {
+            "model": self.settings.answer_generation_model,
+            "temperature": 0,
+            "stream": True,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        req = request.Request(
+            self._chat_completion_endpoint(),
+            data=json.dumps(payload).encode("utf-8"),
+            headers=self._chat_completion_headers(),
+            method="POST",
+        )
+
+        try:
+            response = request.urlopen(
+                req,
+                timeout=self.settings.answer_generation_timeout_seconds,
+            )
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="ignore")
+            raise RuntimeError(
+                f"Answer generation API returned HTTP {exc.code}: {detail}"
+            ) from exc
+        except error.URLError as exc:
+            raise RuntimeError(
+                f"Answer generation API request failed: {exc.reason}"
+            ) from exc
+
+        try:
+            for raw_line in response:
+                line = raw_line.decode("utf-8", errors="ignore").strip()
+                if not line or not line.startswith("data:"):
+                    continue
+
+                data = line[5:].strip()
+                if not data or data == "[DONE]":
+                    continue
+
+                try:
+                    payload = json.loads(data)
+                except ValueError as exc:
+                    raise RuntimeError(
+                        "Answer generation API returned invalid stream JSON"
+                    ) from exc
+
+                try:
+                    delta = payload["choices"][0].get("delta", {})
+                except (KeyError, IndexError, TypeError) as exc:
+                    raise RuntimeError(
+                        "Answer generation API returned an invalid stream payload"
+                    ) from exc
+
+                content = delta.get("content")
+                if isinstance(content, str) and content:
+                    yield content
+                    continue
+
+                if isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, str) and item:
+                            yield item
+                        elif isinstance(item, dict):
+                            text = item.get("text")
+                            if isinstance(text, str) and text:
+                                yield text
+        finally:
+            response.close()
 
     def _chat_completion_endpoint(self) -> str:
         base_url = self.settings.answer_generation_base_url

@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
-from typing import Any
+from typing import Any, Generator
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -335,6 +335,340 @@ class DocumentVectorService:
             },
         )
         return response
+
+    def search_stream(
+        self,
+        query: str,
+        top_k: int | None = None,
+        document_ids: Sequence[str] | None = None,
+    ) -> Generator[dict[str, Any], None, SearchResponse]:
+        normalized_query = query.strip()
+        if not normalized_query:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Query must not be empty.",
+            )
+
+        effective_top_k = top_k or self.settings.vector_search_top_k
+        selected_document_ids = sorted({item for item in (document_ids or []) if item})
+        query_rewrite_enabled = self.query_rewrite_service.is_enabled()
+
+        yield self._progress_event(
+            key="search-start",
+            label="开始检索证据",
+            detail=(
+                f"top_k={effective_top_k}，文档范围 "
+                f"{len(selected_document_ids) if selected_document_ids else '全部'}。"
+            ),
+        )
+
+        cache_payload = {
+            "query": normalized_query,
+            "top_k": effective_top_k,
+            "document_ids": selected_document_ids,
+            "query_rewrite_enabled": query_rewrite_enabled,
+            "query_rewrite_model": self.settings.query_rewrite_model or "",
+            "rerank_enabled": self.rerank_service.is_enabled(),
+            "rerank_model": self.settings.rerank_model
+            or self.settings.answer_generation_model
+            or self.settings.query_rewrite_model
+            or "",
+        }
+        cached = self.chunk_store.get_cached_search(cache_payload)
+        if cached is not None:
+            response = SearchResponse.model_validate(cached)
+            yield self._progress_event(
+                key="search-cache",
+                label="命中检索缓存",
+                detail=f"直接返回 {len(response.items)} 条结果。",
+                status="done",
+            )
+            return response
+
+        initial_attempt = yield from self._execute_search_attempt_stream(
+            stage="initial",
+            search_query=normalized_query,
+            top_k=effective_top_k,
+            document_ids=selected_document_ids,
+        )
+        attempts = [initial_attempt]
+        rewrite_meta = self._build_default_query_rewrite_meta(normalized_query)
+
+        if self.query_rewrite_service.is_enabled():
+            try:
+                rewrite_meta, expanded_attempts = yield from self._run_query_rewrite_pipeline_stream(
+                    original_query=normalized_query,
+                    initial_attempt=initial_attempt,
+                    top_k=effective_top_k,
+                    document_ids=selected_document_ids,
+                )
+                attempts.extend(expanded_attempts)
+            except Exception as exc:
+                logger.warning(
+                    "Query rewrite pipeline failed; returning initial retrieval results",
+                    extra={
+                        "event": "vector_query_rewrite_failed",
+                        "query_length": len(normalized_query),
+                        "top_k": effective_top_k,
+                        "document_filter_count": len(selected_document_ids),
+                        "error": str(exc),
+                    },
+                )
+                rewrite_meta["query_rewrite_error"] = str(exc)
+                rewrite_meta["query_rewrite_skipped_reason"] = "rewrite_pipeline_failed"
+                yield self._progress_event(
+                    key="query-rewrite-error",
+                    label="扩展检索失败，回退初始结果",
+                    detail=str(exc),
+                    status="error",
+                )
+        elif self.settings.query_rewrite_enabled:
+            rewrite_meta["query_rewrite_skipped_reason"] = "query_rewrite_not_configured"
+            yield self._progress_event(
+                key="query-rewrite-skipped",
+                label="扩展检索未配置",
+                detail="已跳过 query rewrite。",
+                status="done",
+            )
+
+        final_items = (
+            self._merge_search_attempts(attempts, effective_top_k)
+            if len(attempts) > 1
+            else initial_attempt.items
+        )
+        response = self._build_search_response(
+            items=final_items,
+            meta=self._build_search_meta(
+                original_query=normalized_query,
+                attempts=attempts,
+                rewrite_meta=rewrite_meta,
+                top_k=effective_top_k,
+            ),
+        )
+        self.chunk_store.set_cached_search(cache_payload, response.model_dump())
+        yield self._progress_event(
+            key="search-complete",
+            label="检索完成",
+            detail=f"最终命中 {len(response.items)} 条结果。",
+            status="done",
+        )
+        return response
+
+    def _run_query_rewrite_pipeline_stream(
+        self,
+        original_query: str,
+        initial_attempt: SearchAttempt,
+        top_k: int,
+        document_ids: list[str],
+    ) -> Generator[dict[str, Any], None, tuple[dict[str, Any], list[SearchAttempt]]]:
+        rewrite_meta = self._build_default_query_rewrite_meta(original_query)
+
+        yield self._progress_event(
+            key="query-grade-start",
+            label="评估首轮召回质量",
+            detail="判断是否需要扩展查询。",
+        )
+        grade = self.query_rewrite_service.grade_retrieval(
+            original_query,
+            initial_attempt.items,
+        )
+        rewrite_meta["relevance_grade_score"] = grade.binary_score
+        rewrite_meta["relevance_grade_reason"] = grade.reason
+        rewrite_meta["rewrite_needed"] = grade.rewrite_needed
+        yield self._progress_event(
+            key="query-grade-result",
+            label="召回质量评估完成",
+            detail=f"grade={grade.binary_score}，{grade.reason}",
+            status="done",
+        )
+
+        if not grade.rewrite_needed:
+            rewrite_meta["query_rewrite_skipped_reason"] = "relevance_grade_passed"
+            yield self._progress_event(
+                key="query-rewrite-skip",
+                label="首轮召回已足够，跳过扩展检索",
+                detail="保留原问题继续回答。",
+                status="done",
+            )
+            return rewrite_meta, []
+
+        yield self._progress_event(
+            key="query-plan-start",
+            label="生成扩展查询",
+            detail="准备 step-back / HyDE 扩展策略。",
+        )
+        plan = self.query_rewrite_service.plan_rewrite(
+            original_query,
+            initial_attempt.items,
+        )
+        expanded_queries = plan.expanded_queries()
+        rewrite_meta.update(
+            {
+                "query_rewrite_strategy": plan.strategy,
+                "query_rewrite_reason": plan.reason,
+                "step_back_question": plan.step_back_question,
+                "expanded_queries": [query for _, query in expanded_queries],
+                "primary_expanded_query": expanded_queries[0][1]
+                if expanded_queries
+                else None,
+                "hypothetical_answer": plan.hypothetical_answer,
+            }
+        )
+        yield self._progress_event(
+            key="query-plan-result",
+            label="扩展查询已生成",
+            detail=plan.reason or plan.strategy,
+            status="done",
+        )
+
+        if not expanded_queries:
+            rewrite_meta["query_rewrite_skipped_reason"] = "planner_returned_no_query"
+            yield self._progress_event(
+                key="query-rewrite-empty",
+                label="扩展查询为空",
+                detail="保持初始检索结果。",
+                status="done",
+            )
+            return rewrite_meta, []
+
+        expanded_attempts: list[SearchAttempt] = []
+        for stage, expanded_query in expanded_queries:
+            yield self._progress_event(
+                key=f"{stage}-prepare",
+                label=f"启动 {self._search_stage_label(stage)}",
+                detail=expanded_query,
+            )
+            attempt = yield from self._execute_search_attempt_stream(
+                stage=stage,
+                search_query=expanded_query,
+                top_k=top_k,
+                document_ids=document_ids,
+            )
+            expanded_attempts.append(attempt)
+
+        rewrite_meta["query_rewrite_applied"] = any(
+            attempt.items for attempt in expanded_attempts
+        )
+        rewrite_meta["query_rewrite_stage"] = (
+            "expanded" if rewrite_meta["query_rewrite_applied"] else "initial"
+        )
+        if not rewrite_meta["query_rewrite_applied"]:
+            rewrite_meta["query_rewrite_skipped_reason"] = (
+                "expanded_retrieval_returned_no_results"
+            )
+            yield self._progress_event(
+                key="query-rewrite-no-hit",
+                label="扩展检索未带来新增结果",
+                detail="保留初始结果。",
+                status="done",
+            )
+
+        return rewrite_meta, expanded_attempts
+
+    def _execute_search_attempt_stream(
+        self,
+        stage: str,
+        search_query: str,
+        top_k: int,
+        document_ids: list[str],
+    ) -> Generator[dict[str, Any], None, SearchAttempt]:
+        stage_label = self._search_stage_label(stage)
+        yield self._progress_event(
+            key=f"{stage}-embed",
+            label=f"{stage_label}生成检索向量",
+            detail="准备 dense + sparse 查询表示。",
+        )
+        corpus_stats = self.chunk_store.get_bm25_stats()
+        if corpus_stats is None:
+            corpus_stats = self._build_and_cache_bm25_stats()
+
+        dense_embedding = self.dense_embedding_service.embed_text(search_query)
+        sparse_embedding = self.sparse_embedding_service.sparse_embed_text(
+            search_query,
+            corpus_stats,
+        )
+
+        candidate_k = max(top_k * 3, top_k)
+        yield self._progress_event(
+            key=f"{stage}-retrieve",
+            label=f"{stage_label}执行向量检索",
+            detail=f"候选上限 {candidate_k} 条。",
+        )
+        try:
+            retrieved, retrieval_mode = self.milvus.search(
+                dense_embedding=dense_embedding,
+                sparse_embedding=sparse_embedding,
+                top_k=candidate_k,
+                document_ids=document_ids,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Vector search is unavailable: {exc}",
+            ) from exc
+
+        yield self._progress_event(
+            key=f"{stage}-retrieve-done",
+            label=f"{stage_label}完成向量召回",
+            detail=f"模式 {retrieval_mode}，命中 {len(retrieved)} 条候选。",
+            status="done",
+        )
+
+        yield self._progress_event(
+            key=f"{stage}-rerank",
+            label=f"{stage_label}重排候选结果",
+            detail="按相关性重新排序。",
+        )
+        reranked, rerank_meta = self.rerank_service.rerank(
+            query=search_query,
+            docs=retrieved,
+            top_k=top_k,
+        )
+        if rerank_meta.get("rerank_applied"):
+            rerank_detail = (
+                f"provider={rerank_meta.get('rerank_provider') or 'unknown'}，"
+                f"候选 {int(rerank_meta.get('rerank_candidate_count') or 0)} 条。"
+            )
+        else:
+            rerank_detail = str(
+                rerank_meta.get("rerank_skipped_reason") or "未执行 rerank。"
+            )
+        yield self._progress_event(
+            key=f"{stage}-rerank-done",
+            label=f"{stage_label}重排结束",
+            detail=rerank_detail,
+            status="done",
+        )
+
+        yield self._progress_event(
+            key=f"{stage}-merge",
+            label=f"{stage_label}合并父块结果",
+            detail="检查是否需要把命中的子块上卷到父块。",
+        )
+        merged, merge_meta = self._auto_merge_documents(reranked, top_k)
+        merge_detail = (
+            f"替换 {int(merge_meta.get('auto_merge_replaced_chunks') or 0)} 个 chunk。"
+            if merge_meta.get("auto_merge_applied")
+            else "未触发父块合并。"
+        )
+        yield self._progress_event(
+            key=f"{stage}-merge-done",
+            label=f"{stage_label}整理完成",
+            detail=merge_detail,
+            status="done",
+        )
+
+        return SearchAttempt(
+            stage=stage,
+            query=search_query,
+            items=merged,
+            meta={
+                "retrieval_mode": retrieval_mode,
+                "candidate_k": candidate_k,
+                **rerank_meta,
+                **merge_meta,
+            },
+        )
 
     def _run_query_rewrite_pipeline(
         self,
@@ -777,6 +1111,33 @@ class DocumentVectorService:
         )
         self.chunk_store.set_bm25_stats(stats)
         return stats
+
+    @staticmethod
+    def _progress_event(
+        *,
+        key: str,
+        label: str,
+        detail: str | None = None,
+        status: str = "running",
+    ) -> dict[str, Any]:
+        return {
+            "type": "rag_step",
+            "step": {
+                "key": key,
+                "label": label,
+                "detail": detail or "",
+                "status": status,
+            },
+        }
+
+    @staticmethod
+    def _search_stage_label(stage: str) -> str:
+        mapping = {
+            "initial": "首轮检索",
+            "step_back": "Step-back 扩展检索",
+            "hyde": "HyDE 扩展检索",
+        }
+        return mapping.get(stage, f"{stage} 检索")
 
     def _rebuild_vector_index(self) -> None:
         leaf_rows = self.chunk_store.get_leaf_chunks_for_vector_index()
