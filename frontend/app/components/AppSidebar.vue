@@ -3,7 +3,7 @@ import { storeToRefs } from "pinia";
 import { useUiStore } from "../../stores/ui";
 
 const uiStore = useUiStore();
-const { isMobileOpen } = storeToRefs(uiStore);
+const { isMobileOpen, isSidebarCollapsed } = storeToRefs(uiStore);
 const route = useRoute();
 
 const navItems = [
@@ -18,8 +18,9 @@ const navItems = [
 ];
 
 const shellClass = computed(() => [
-  "fixed inset-y-0 left-0 z-40 transition-transform duration-300 md:translate-x-0",
+  "fixed inset-y-0 left-0 z-40 transition-transform duration-300",
   isMobileOpen.value ? "translate-x-0" : "-translate-x-full",
+  isSidebarCollapsed.value ? "md:-translate-x-full" : "md:translate-x-0",
 ]);
 
 function isActive(path: string) {
@@ -42,19 +43,14 @@ function handleNavigate() {
     <aside
       class="flex h-full w-[264px] flex-col border-r border-[#ebe5da] bg-[#f7f4ee] shadow-xl shadow-zinc-950/5 md:shadow-none"
     >
-      <div class="flex items-center justify-between px-4 pb-4 pt-6">
-        <div class="flex items-center gap-3">
-          <div
-            class="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-black/5"
-          >
-            <span class="text-sm font-semibold text-zinc-900">豆</span>
-          </div>
-          <div>
-            <p class="text-lg font-semibold tracking-tight text-zinc-900">
-              豆包
-            </p>
-          </div>
-        </div>
+      <div class="flex items-center justify-end px-4 pb-4 pt-6">
+        <UButton
+          class="hidden md:inline-flex"
+          icon="i-lucide-panel-left-close"
+          color="neutral"
+          variant="ghost"
+          @click="uiStore.toggleSidebar()"
+        />
 
         <UButton
           class="md:hidden"
