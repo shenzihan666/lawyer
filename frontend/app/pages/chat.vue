@@ -37,18 +37,9 @@ const indexedDocuments = computed(() =>
   documents.value.filter((item) => item.vector_status === "indexed"),
 );
 
-const candidateOptions = computed(() =>
-  indexedDocuments.value.map((item) => ({
-    label: item.original_filename,
-    value: item.id,
-  })),
-);
-
 const selectedDocuments = computed(() =>
   indexedDocuments.value.filter((item) => selectedDocumentIds.value.includes(item.id)),
 );
-
-const visibleIndexedDocuments = computed(() => indexedDocuments.value.slice(0, 5));
 
 const topKOptions = [3, 5, 8].map((value) => ({
   label: `${value} 条来源`,
@@ -110,9 +101,38 @@ const canSubmit = computed(
     indexedDocuments.value.length > 0 &&
     !isResponding.value,
 );
+const isAllDocumentsSelected = computed(
+  () =>
+    indexedDocuments.value.length > 0 &&
+    selectedDocumentIds.value.length === indexedDocuments.value.length,
+);
 
 function formatScore(score: number) {
   return score.toFixed(3);
+}
+
+function isDocumentSelected(documentId: string) {
+  return selectedDocumentIds.value.includes(documentId);
+}
+
+function toggleDocumentSelection(documentId: string) {
+  if (isDocumentSelected(documentId)) {
+    selectedDocumentIds.value = selectedDocumentIds.value.filter(
+      (id) => id !== documentId,
+    );
+    return;
+  }
+
+  selectedDocumentIds.value = [...selectedDocumentIds.value, documentId];
+}
+
+function toggleSelectAllDocuments() {
+  if (isAllDocumentsSelected.value) {
+    selectedDocumentIds.value = [];
+    return;
+  }
+
+  selectedDocumentIds.value = indexedDocuments.value.map((item) => item.id);
 }
 
 function autoResizeComposer() {
@@ -292,56 +312,29 @@ onMounted(async () => {
                 />
               </div>
 
-              <div>
-                <label class="chat-field__label">限定文档范围</label>
-                <USelectMenu
-                  v-model="selectedDocumentIds"
-                  :items="candidateOptions"
-                  value-key="value"
-                  label-key="label"
-                  multiple
-                  searchable
-                  :loading="isLoadingDocuments"
-                  placeholder="默认检索全部已索引文档"
-                  class="w-full"
-                />
-              </div>
-
               <p class="chat-panel__copy">{{ sideSummary }}</p>
-
-              <div
-                v-if="selectedDocuments.length"
-                class="flex flex-wrap gap-2"
-              >
-                <UBadge
-                  v-for="item in selectedDocuments.slice(0, 4)"
-                  :key="item.id"
-                  color="neutral"
-                  variant="subtle"
-                  size="xs"
-                >
-                  {{ item.original_filename }}
-                </UBadge>
-                <UBadge
-                  v-if="selectedDocuments.length > 4"
-                  color="neutral"
-                  variant="subtle"
-                  size="xs"
-                >
-                  +{{ selectedDocuments.length - 4 }}
-                </UBadge>
-              </div>
             </div>
           </section>
 
           <section class="chat-panel">
             <div class="chat-panel__header">
               <div>
-                <h2>可用文档</h2>
+                <h2>限定文档范围</h2>
               </div>
-              <UBadge color="neutral" variant="subtle" size="sm">
-                {{ indexedDocuments.length }}
-              </UBadge>
+              <div class="flex items-center gap-2">
+                <UBadge color="neutral" variant="subtle" size="sm">
+                  {{ selectedDocuments.length }}/{{ indexedDocuments.length }}
+                </UBadge>
+                <UButton
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  :disabled="!indexedDocuments.length"
+                  @click="toggleSelectAllDocuments"
+                >
+                  {{ isAllDocumentsSelected ? "取消全选" : "全选" }}
+                </UButton>
+              </div>
             </div>
 
             <div v-if="isLoadingDocuments" class="chat-empty">
@@ -351,13 +344,21 @@ onMounted(async () => {
               还没有已索引文档。请先到“知识库”页面上传并完成向量化。
             </div>
             <div v-else class="chat-doc-list">
-              <article
-                v-for="item in visibleIndexedDocuments"
+              <button
+                v-for="item in indexedDocuments"
                 :key="item.id"
                 class="chat-doc-item"
+                :class="{ 'chat-doc-item--selected': isDocumentSelected(item.id) }"
+                @click="toggleDocumentSelection(item.id)"
               >
-                <div class="chat-doc-item__icon">
-                  <UIcon name="i-lucide-file-text" class="h-4 w-4" />
+                <div
+                  class="chat-doc-item__check"
+                  :class="{ 'chat-doc-item__check--selected': isDocumentSelected(item.id) }"
+                >
+                  <UIcon
+                    :name="isDocumentSelected(item.id) ? 'i-lucide-check' : 'i-lucide-plus'"
+                    class="h-4 w-4"
+                  />
                 </div>
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-medium text-zinc-900">
@@ -367,13 +368,7 @@ onMounted(async () => {
                     {{ item.file_extension }} · {{ item.page_count || 0 }} 页
                   </p>
                 </div>
-              </article>
-              <p
-                v-if="indexedDocuments.length > visibleIndexedDocuments.length"
-                class="text-xs text-zinc-500"
-              >
-                另有 {{ indexedDocuments.length - visibleIndexedDocuments.length }} 份已索引文档可参与问答。
-              </p>
+              </button>
             </div>
           </section>
         </aside>
@@ -826,10 +821,42 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 12px;
+  width: 100%;
+  text-align: left;
   border-radius: 18px;
   border: 1px solid #eee7db;
   background: #fcfbf8;
   padding: 12px 13px;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.chat-doc-item:hover {
+  border-color: #d9e1ff;
+  background: #ffffff;
+}
+
+.chat-doc-item--selected {
+  border-color: #d9e1ff;
+  background: linear-gradient(180deg, #fcfbff, #ffffff);
+}
+
+.chat-doc-item__check {
+  display: flex;
+  height: 34px;
+  width: 34px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid #e7e1d6;
+  background: #ffffff;
+  color: #a1a1aa;
+}
+
+.chat-doc-item__check--selected {
+  border-color: #3158ff;
+  background: #3158ff;
+  color: #ffffff;
 }
 
 .chat-doc-item__icon {

@@ -16,6 +16,8 @@ const renameDraft = ref("");
 const navItems = [
   { label: "知识库", path: "/documents", icon: "i-lucide-book-open" },
   { label: "智能检索", path: "/search", icon: "i-lucide-search" },
+  { label: "合同审查", path: "/contract-review", icon: "i-lucide-file-signature" },
+  { label: "对方观点预判", path: "/opponent-analysis", icon: "i-lucide-shield-question" },
 ];
 
 const shellClass = computed(() => [
@@ -29,7 +31,7 @@ function isActive(path: string) {
 }
 
 function isActiveConversation(threadId: string) {
-  return activeThreadId.value === threadId;
+  return route.path === "/chat" && activeThreadId.value === threadId;
 }
 
 function isEditingConversation(threadId: string) {
@@ -46,7 +48,7 @@ async function handleNewConversation() {
 }
 
 async function handleSelectConversation(threadId: string) {
-  if (activeThreadId.value === threadId) return;
+  if (route.path === "/chat" && activeThreadId.value === threadId) return;
   conversationsStore.setActive(threadId);
   await chatStore.switchConversation(threadId);
   if (route.path !== "/chat") {
