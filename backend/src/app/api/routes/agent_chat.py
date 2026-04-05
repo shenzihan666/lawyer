@@ -193,7 +193,7 @@ async def agent_chat_stream(
     is_new = not request.thread_id
     thread_id = request.thread_id or str(uuid4())
 
-    # Create conversation meta for new conversations
+    # Create or prime conversation meta before streaming so the sidebar can show it immediately.
     if is_new:
         meta = ConversationMeta(
             thread_id=thread_id,
@@ -203,6 +203,14 @@ async def agent_chat_stream(
         db.add(meta)
         db.commit()
         _schedule_title_generation(thread_id, request.query)
+    else:
+        meta = db.query(ConversationMeta).filter_by(thread_id=thread_id).first()
+        if meta:
+            if not meta.last_message_preview:
+                meta.last_message_preview = request.query[:200]
+                db.commit()
+            if meta.title == DEFAULT_CONVERSATION_TITLE and meta.message_count == 0:
+                _schedule_title_generation(thread_id, request.query)
 
     async def event_generator():
         import traceback as tb_module

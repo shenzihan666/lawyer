@@ -404,7 +404,7 @@ export const useChatStore = defineStore("chat", () => {
     }
 
     const sessionKeyAtStart = activeSessionKey.value;
-    const state = ensureSessionState(sessionKeyAtStart);
+    let state = ensureSessionState(sessionKeyAtStart);
     if (state.isResponding) {
       return;
     }
@@ -413,6 +413,25 @@ export const useChatStore = defineStore("chat", () => {
     const isNewConversation = !existingThreadId;
     let resolvedThreadId = existingThreadId;
     let resolvedSessionKey = sessionKeyAtStart;
+
+    if (!resolvedThreadId) {
+      try {
+        resolvedThreadId = await conversationsStore.createConversation();
+        resolvedSessionKey = renameSessionKey(sessionKeyAtStart, resolvedThreadId);
+        state = ensureSessionState(resolvedSessionKey, resolvedThreadId);
+        state.threadId = resolvedThreadId;
+
+        if (activeSessionKey.value === resolvedSessionKey) {
+          conversationsStore.setActive(resolvedThreadId);
+        }
+
+        upsertConversationSnapshot(resolvedThreadId, query, state);
+      } catch {
+        resolvedThreadId = null;
+        resolvedSessionKey = sessionKeyAtStart;
+        state = ensureSessionState(resolvedSessionKey);
+      }
+    }
 
     const userMessage: ChatMessage = {
       id: createMessageId("user"),
@@ -443,7 +462,7 @@ export const useChatStore = defineStore("chat", () => {
         },
         body: JSON.stringify({
           query,
-          thread_id: existingThreadId,
+          thread_id: resolvedThreadId,
           top_k: topK.value,
           document_ids: selectedDocumentIds.value,
         }),
@@ -465,10 +484,10 @@ export const useChatStore = defineStore("chat", () => {
         if (activeSessionKey.value === resolvedSessionKey) {
           conversationsStore.setActive(responseThreadId);
         }
-      } else if (existingThreadId) {
-        upsertConversationSnapshot(existingThreadId, query, state);
+      } else if (resolvedThreadId) {
+        upsertConversationSnapshot(resolvedThreadId, query, state);
         if (activeSessionKey.value === sessionKeyAtStart) {
-          conversationsStore.setActive(existingThreadId);
+          conversationsStore.setActive(resolvedThreadId);
         }
       }
 

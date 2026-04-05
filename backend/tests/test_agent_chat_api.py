@@ -71,6 +71,59 @@ def test_first_message_creates_conversation_and_schedules_ai_title(
         session.close()
 
 
+def test_existing_placeholder_conversation_schedules_ai_title_on_first_message(
+    client, monkeypatch
+) -> None:
+    from app.api.routes import agent_chat as agent_chat_module
+    from app.db.session import get_session_factory
+    from app.services.agent import checkpoint as checkpoint_module
+    from app.services.agent import factory as factory_module
+
+    async def fake_get_checkpointer():
+        return object()
+
+    scheduled: list[tuple[str, str]] = []
+
+    def fake_schedule_title_generation(thread_id: str, query: str) -> None:
+        scheduled.append((thread_id, query))
+
+    session = get_session_factory()()
+    try:
+        meta = ConversationMeta(
+            thread_id="thread-existing",
+            title="新对话",
+            message_count=0,
+            last_message_preview=None,
+        )
+        session.add(meta)
+        session.commit()
+    finally:
+        session.close()
+
+    monkeypatch.setattr(checkpoint_module, "get_checkpointer", fake_get_checkpointer)
+    monkeypatch.setattr(
+        factory_module,
+        "create_lawyer_agent",
+        lambda checkpointer: _FakeAgent(),
+    )
+    monkeypatch.setattr(
+        agent_chat_module,
+        "_schedule_title_generation",
+        fake_schedule_title_generation,
+    )
+
+    with client.stream(
+        "POST",
+        "/api/v1/agent/stream",
+        json={"query": QUERY, "thread_id": "thread-existing", "top_k": 5, "document_ids": []},
+    ) as response:
+        body = "".join(response.iter_text())
+
+    assert response.status_code == 200
+    assert "data: [DONE]" in body
+    assert scheduled == [("thread-existing", QUERY)]
+
+
 def test_translate_event_emits_result_for_dict_tool_output() -> None:
     from app.api.routes.agent_chat import _translate_event
 
