@@ -1,3 +1,8 @@
+from .case_search import (
+    CaseSearchHit as CaseSearchHit,
+    CaseSearchQueryAsset as CaseSearchQueryAsset,
+    CaseSearchRecord as CaseSearchRecord,
+)
 from .conversation import ConversationMeta as ConversationMeta
 from .contract_review import (
     ContractReviewClause as ContractReviewClause,

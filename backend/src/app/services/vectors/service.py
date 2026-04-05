@@ -233,6 +233,18 @@ class DocumentVectorService:
         top_k: int | None = None,
         document_ids: Sequence[str] | None = None,
     ) -> SearchResponse:
+        return self.search_chunks(
+            query=query,
+            top_k=top_k,
+            document_ids=document_ids,
+        )
+
+    def search_chunks(
+        self,
+        query: str,
+        top_k: int | None = None,
+        document_ids: Sequence[str] | None = None,
+    ) -> SearchResponse:
         normalized_query = query.strip()
         if not normalized_query:
             raise HTTPException(

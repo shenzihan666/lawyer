@@ -4,6 +4,28 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class PreviewFragmentItem(BaseModel):
+    fragment_index: int
+    page_number: int
+    content: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class DocumentPreviewResponse(BaseModel):
+    asset_type: str
+    asset_id: str
+    title: str
+    original_filename: str
+    file_extension: str
+    mime_type: str | None = None
+    preview_excerpt: str | None = None
+    file_url: str
+    preview_url: str | None = None
+    preview_status: str = "not_requested"
+    fragments: list[PreviewFragmentItem] = Field(default_factory=list)
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 class DocumentItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

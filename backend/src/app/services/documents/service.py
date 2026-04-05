@@ -18,8 +18,10 @@ from app.schemas.document import (
     DocumentItem,
     DocumentListResponse,
     DocumentOperationResponse,
+    DocumentPreviewResponse,
     DocumentSummary,
 )
+from app.services.case_search.preview import DocumentPreviewService
 from app.services.documents.storage import UploadStorage
 from app.services.loaders import registry
 from app.services.loaders.base import DocumentLoadError, UnsupportedDocumentTypeError
@@ -37,6 +39,7 @@ class DocumentService:
         self.db = db
         self.settings = settings
         self.storage = UploadStorage(settings)
+        self.preview_service = DocumentPreviewService(db=db, settings=settings)
         self.vector_service = DocumentVectorService(db=db, settings=settings)
 
     def list_documents(self) -> DocumentListResponse:
@@ -255,6 +258,10 @@ class DocumentService:
             if document is None or document.deleted_at is not None:
                 continue
 
+            preview_storage_path = None
+            if isinstance(document.trace_metadata, dict):
+                preview_storage_path = document.trace_metadata.get("preview_storage_path")
+            self.preview_service.delete_preview_artifact(preview_storage_path)
             document.deleted_at = utcnow()
             document.ingestion_status = DocumentIngestionStatus.deleted.value
             document.updated_at = utcnow()
@@ -280,6 +287,20 @@ class DocumentService:
             items=active_items,
             summary=self._build_summary(documents),
             affected_ids=affected_ids,
+        )
+
+    def get_document_preview(self, document_id: str) -> DocumentPreviewResponse:
+        return self.preview_service.get_document_preview(document_id)
+
+    def resolve_document_file_path(
+        self,
+        document_id: str,
+        *,
+        preview: bool = False,
+    ):
+        return self.preview_service.resolve_document_file_path(
+            document_id,
+            preview=preview,
         )
 
     def _fetch_documents(self, include_deleted: bool) -> list[DocumentAsset]:

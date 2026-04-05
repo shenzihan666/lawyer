@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi.responses import FileResponse
 
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
@@ -6,6 +7,7 @@ from app.schemas.document import (
     BatchDeleteRequest,
     DocumentListResponse,
     DocumentOperationResponse,
+    DocumentPreviewResponse,
     VectorizeRequest,
 )
 from app.services.documents.service import DocumentService
@@ -57,3 +59,30 @@ def delete_document(
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentOperationResponse:
     return service.soft_delete_documents([document_id])
+
+
+@router.get("/{document_id}/preview", response_model=DocumentPreviewResponse)
+def get_document_preview(
+    document_id: str,
+    service: DocumentService = Depends(get_document_service),
+) -> DocumentPreviewResponse:
+    return service.get_document_preview(document_id)
+
+
+@router.get("/{document_id}/file")
+def get_document_file(
+    document_id: str,
+    preview: bool = Query(default=False),
+    disposition: str = Query(default="attachment"),
+    service: DocumentService = Depends(get_document_service),
+) -> FileResponse:
+    path, media_type, filename = service.resolve_document_file_path(
+        document_id,
+        preview=preview,
+    )
+    return FileResponse(
+        path,
+        media_type=media_type,
+        filename=filename,
+        content_disposition_type="inline" if disposition == "inline" else "attachment",
+    )

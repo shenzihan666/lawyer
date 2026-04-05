@@ -1,0 +1,422 @@
+[
+  {
+    "case_index": 1,
+    "title": "中国",
+    "parent_titles": [],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\001_中国.pdf",
+    "start_page": 1,
+    "end_page": 6,
+    "start_top": 497.35,
+    "next_start_page": 6,
+    "next_start_top": 430.9,
+    "output_pages": 6,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 2,
+    "title": "一 、行政处罚",
+    "parent_titles": [],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\002_一 、行政处罚.pdf",
+    "start_page": 6,
+    "end_page": 105,
+    "start_top": 430.9,
+    "next_start_page": 105,
+    "next_start_top": 626.85,
+    "output_pages": 100,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 3,
+    "title": "90 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "三、行政许可"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\003_90 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 105,
+    "end_page": 111,
+    "start_top": 626.85,
+    "next_start_page": 111,
+    "next_start_top": 126.75,
+    "output_pages": 7,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 4,
+    "title": "1. 裁判书字号",
+    "parent_titles": [
+      "三、行政许可"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\004_1. 裁判书字号.pdf",
+    "start_page": 111,
+    "end_page": 111,
+    "start_top": 126.75,
+    "next_start_page": 111,
+    "next_start_top": 86.05,
+    "output_pages": 1,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 5,
+    "title": "2. 案由:注销机动车驾驶证纠纷",
+    "parent_titles": [
+      "三、行政许可"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\005_2. 案由_注销机动车驾驶证纠纷.pdf",
+    "start_page": 111,
+    "end_page": 137,
+    "start_top": 86.05,
+    "next_start_page": 137,
+    "next_start_top": 623.35,
+    "output_pages": 27,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 6,
+    "title": "122 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "三、行政许可",
+      "四、行政登记"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\006_122 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 137,
+    "end_page": 145,
+    "start_top": 623.35,
+    "next_start_page": 145,
+    "next_start_top": 628.35,
+    "output_pages": 9,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 7,
+    "title": "130 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "三、行政许可",
+      "四、行政登记"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\007_130 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 145,
+    "end_page": 159,
+    "start_top": 628.35,
+    "next_start_page": 159,
+    "next_start_top": 629.85,
+    "output_pages": 15,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 8,
+    "title": "144 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "三、行政许可",
+      "四、行政登记"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\008_144 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 159,
+    "end_page": 163,
+    "start_top": 629.85,
+    "next_start_page": 163,
+    "next_start_top": 628.8,
+    "output_pages": 5,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 9,
+    "title": "148 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "三、行政许可",
+      "五、行政确认"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\009_148 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 163,
+    "end_page": 171,
+    "start_top": 628.8,
+    "next_start_page": 171,
+    "next_start_top": 623.35,
+    "output_pages": 9,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 10,
+    "title": "156 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "三、行政许可",
+      "五、行政确认"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\010_156 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 171,
+    "end_page": 183,
+    "start_top": 623.35,
+    "next_start_page": 183,
+    "next_start_top": 627.35,
+    "output_pages": 13,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 11,
+    "title": "168 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "三、行政许可",
+      "五、行政确认"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\011_168 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 183,
+    "end_page": 195,
+    "start_top": 627.35,
+    "next_start_page": 195,
+    "next_start_top": 626.35,
+    "output_pages": 13,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 12,
+    "title": "180 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "三、行政许可",
+      "五、行政确认"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\012_180 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 195,
+    "end_page": 222,
+    "start_top": 626.35,
+    "next_start_page": 222,
+    "next_start_top": 625.35,
+    "output_pages": 28,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 13,
+    "title": "206 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "六、政府信息公开 191"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\013_206 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 222,
+    "end_page": 226,
+    "start_top": 625.35,
+    "next_start_page": 226,
+    "next_start_top": 625.35,
+    "output_pages": 5,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 14,
+    "title": "210 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "六、政府信息公开 191",
+      "七、行政协议"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\014_210 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 226,
+    "end_page": 232,
+    "start_top": 625.35,
+    "next_start_page": 232,
+    "next_start_top": 623.85,
+    "output_pages": 7,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 15,
+    "title": "216 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "六、政府信息公开 191",
+      "七、行政协议"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\015_216 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 232,
+    "end_page": 236,
+    "start_top": 623.85,
+    "next_start_page": 236,
+    "next_start_top": 622.85,
+    "output_pages": 5,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 16,
+    "title": "220 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "六、政府信息公开 191",
+      "七、行政协议"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\016_220 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 236,
+    "end_page": 254,
+    "start_top": 622.85,
+    "next_start_page": 254,
+    "next_start_top": 624.35,
+    "output_pages": 19,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 17,
+    "title": "238 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "六、政府信息公开 191",
+      "七、行政协议"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\017_238 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 254,
+    "end_page": 260,
+    "start_top": 624.35,
+    "next_start_page": 260,
+    "next_start_top": 624.35,
+    "output_pages": 7,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 18,
+    "title": "244 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "六、政府信息公开 191",
+      "七、行政协议"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\018_244 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 260,
+    "end_page": 264,
+    "start_top": 624.35,
+    "next_start_page": 264,
+    "next_start_top": 621.35,
+    "output_pages": 5,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 19,
+    "title": "248 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "六、政府信息公开 191",
+      "七、行政协议"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\019_248 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 264,
+    "end_page": 268,
+    "start_top": 621.35,
+    "next_start_page": 268,
+    "next_start_top": 622.35,
+    "output_pages": 5,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 20,
+    "title": "252 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "六、政府信息公开 191",
+      "七、行政协议"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\020_252 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 268,
+    "end_page": 282,
+    "start_top": 622.35,
+    "next_start_page": 282,
+    "next_start_top": 624.35,
+    "output_pages": 15,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 21,
+    "title": "266 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "六、政府信息公开 191",
+      "八、行政补偿"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\021_266 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 282,
+    "end_page": 313,
+    "start_top": 624.35,
+    "next_start_page": 313,
+    "next_start_top": 619.85,
+    "output_pages": 32,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 22,
+    "title": "296 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "六、政府信息公开 191",
+      "九、其 他"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\022_296 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 313,
+    "end_page": 323,
+    "start_top": 619.85,
+    "next_start_page": 323,
+    "next_start_top": 629.8,
+    "output_pages": 11,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 23,
+    "title": "306 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "九、其 他 299"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\023_306 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 323,
+    "end_page": 337,
+    "start_top": 629.8,
+    "next_start_page": 337,
+    "next_start_top": 622.85,
+    "output_pages": 15,
+    "cropped_start_page": true,
+    "cropped_end_page": true
+  },
+  {
+    "case_index": 24,
+    "title": "320 中国法院2025年度案例 ·行政纠纷",
+    "parent_titles": [
+      "九、其 他 299"
+    ],
+    "source_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例\\18 行政纠纷\\18  行政纠纷 超清对照.pdf",
+    "output_pdf": "D:\\Project\\lawyer\\Resource\\law_documents\\中国法院2025年度案例_拆分案件\\18 行政纠纷\\18 行政纠纷 超清对照\\024_320 中国法院2025年度案例 ·行政纠纷.pdf",
+    "start_page": 337,
+    "end_page": 337,
+    "start_top": 622.85,
+    "next_start_page": null,
+    "next_start_top": null,
+    "output_pages": 1,
+    "cropped_start_page": true,
+    "cropped_end_page": false
+  }
+]

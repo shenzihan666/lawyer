@@ -44,10 +44,18 @@ class DocumentRerankService:
 
         try:
             if self._api_configured():
-                reranked = self._api_rerank(query, candidates, top_k)
-                meta["rerank_provider"] = "api"
-                meta["rerank_model"] = self.settings.rerank_model
-                meta["rerank_endpoint"] = self._rerank_endpoint()
+                try:
+                    reranked = self._api_rerank(query, candidates, top_k)
+                    meta["rerank_provider"] = "api"
+                    meta["rerank_model"] = self.settings.rerank_model
+                    meta["rerank_endpoint"] = self._rerank_endpoint()
+                except Exception:
+                    if not self._llm_configured():
+                        raise
+                    reranked = self._llm_rerank(query, candidates, top_k)
+                    meta["rerank_provider"] = "llm"
+                    meta["rerank_model"] = self._llm_model()
+                    meta["rerank_endpoint"] = self._llm_endpoint()
             else:
                 reranked = self._llm_rerank(query, candidates, top_k)
                 meta["rerank_provider"] = "llm"

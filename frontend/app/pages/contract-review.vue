@@ -103,6 +103,10 @@ function getRemoveJobHint(status: string) {
   return isJobRemovable(status) ? "移除任务" : "审查进行中，暂不可移除";
 }
 
+function isJobProcessing(status: string) {
+  return ["queued", "running"].includes(status);
+}
+
 function onReviewFileChange(event: Event) {
   const input = event.target as HTMLInputElement;
   reviewFile.value = input.files?.[0] ?? null;
@@ -200,7 +204,7 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <section v-if="activeTab === 'launch'" class="grid-layout">
+    <section v-if="activeTab === 'launch'" class="stack">
       <UCard class="card">
         <template #header>
           <div class="card-head">
@@ -282,69 +286,6 @@ onBeforeUnmount(() => {
               发起合同审查
             </UButton>
           </div>
-        </div>
-      </UCard>
-
-      <UCard class="card">
-        <template #header>
-          <div class="card-head">
-            <div>
-              <p class="eyebrow">Timeline</p>
-              <h2>最近任务</h2>
-            </div>
-            <UButton
-              icon="i-lucide-refresh-cw"
-              color="neutral"
-              variant="ghost"
-              :loading="isLoadingJobs"
-              @click="store.fetchJobs()"
-            />
-          </div>
-        </template>
-
-        <div v-if="!jobs.length" class="empty">还没有合同审查任务。</div>
-        <div v-else class="stack">
-          <article
-            v-for="job in jobs"
-            :key="job.id"
-            class="list-card list-card--task"
-            :class="{ 'list-card--active': selectedJob?.id === job.id }"
-          >
-            <button
-              type="button"
-              class="list-card__button"
-              @click="store.selectJob(job.id)"
-            >
-              <div class="card-head">
-                <div>
-                  <p class="title">{{ job.review_name }}</p>
-                  <p class="subtle">
-                    {{ job.template_name || "未命名模板" }} ·
-                    {{ formatDate(job.created_at) }}
-                  </p>
-                </div>
-                <UBadge
-                  :color="getStatusColor(job.status) as any"
-                  variant="subtle"
-                  size="sm"
-                >
-                  {{ getStatusLabel(job.status) }}
-                </UBadge>
-              </div>
-              <p class="subtle">{{ job.original_filename }}</p>
-            </button>
-            <UButton
-              icon="i-lucide-trash-2"
-              color="error"
-              variant="ghost"
-              size="xs"
-              class="list-card__action"
-              :title="getRemoveJobHint(job.status)"
-              :disabled="!isJobRemovable(job.status)"
-              :loading="deletingJobIds.includes(job.id)"
-              @click.stop="handleDeleteJob(job.id)"
-            />
-          </article>
         </div>
       </UCard>
     </section>
@@ -490,9 +431,16 @@ onBeforeUnmount(() => {
         <template #header>
           <div class="card-head">
             <div>
-              <p class="eyebrow">Queue</p>
-              <h2>任务侧栏</h2>
+              <p class="eyebrow">All Tasks</p>
+              <h2>所有任务</h2>
             </div>
+            <UButton
+              icon="i-lucide-refresh-cw"
+              color="neutral"
+              variant="ghost"
+              :loading="isLoadingJobs"
+              @click="store.fetchJobs()"
+            />
           </div>
         </template>
         <div v-if="!jobs.length" class="empty">当前没有可查看的审查任务。</div>
@@ -509,7 +457,12 @@ onBeforeUnmount(() => {
               @click="store.selectJob(job.id)"
             >
               <div class="card-head">
-                <p class="title">{{ job.review_name }}</p>
+                <div>
+                  <p class="title">{{ job.review_name }}</p>
+                  <p v-if="isJobProcessing(job.status)" class="subtle">
+                    正在处理中
+                  </p>
+                </div>
                 <UBadge
                   :color="getStatusColor(job.status) as any"
                   variant="subtle"
