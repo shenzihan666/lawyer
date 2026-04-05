@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { storeToRefs } from "pinia";
 import { useChatStore } from "../../stores/chat";
+import { useConversationsStore } from "../../stores/conversations";
 import { useDocumentStore } from "../../stores/documents";
 
 const chatStore = useChatStore();
+const conversationsStore = useConversationsStore();
 const documentStore = useDocumentStore();
 const toast = useToast();
+const route = useRoute();
 
 const composerRef = ref<HTMLTextAreaElement | null>(null);
 const feedRef = ref<HTMLElement | null>(null);
 const isComposing = ref(false);
 
 const { documents, isLoading: isLoadingDocuments } = storeToRefs(documentStore);
+const { conversations } = storeToRefs(conversationsStore);
 const {
   hasAnswered,
   isResponding,
@@ -20,7 +24,14 @@ const {
   prompt,
   selectedDocumentIds,
   topK,
+  threadId,
 } = storeToRefs(chatStore);
+
+const currentConversationTitle = computed(() => {
+  if (!threadId.value) return null;
+  const item = conversations.value.find((c) => c.thread_id === threadId.value);
+  return item?.title ?? null;
+});
 
 const indexedDocuments = computed(() =>
   documents.value.filter((item) => item.vector_status === "indexed"),
@@ -137,6 +148,10 @@ async function submitQuestion() {
   }
 
   await chatStore.ask();
+  if (threadId.value) {
+    conversationsStore.setActive(threadId.value);
+  }
+  await conversationsStore.refreshList();
   await nextTick();
   autoResizeComposer();
   scrollFeedToBottom();
@@ -214,9 +229,16 @@ watch(
   { deep: true },
 );
 
-onMounted(() => {
+onMounted(async () => {
   if (!documents.value.length) {
     void documentStore.refreshDocuments();
+  }
+
+  // Handle URL param: /chat?thread=xxx
+  const threadParam = route.query.thread as string | undefined;
+  if (threadParam) {
+    conversationsStore.setActive(threadParam);
+    await chatStore.switchConversation(threadParam);
   }
 
   void nextTick(() => {
@@ -228,7 +250,7 @@ onMounted(() => {
 
 <template>
   <div class="chat-page px-4 py-6 md:px-8 md:py-8">
-    <div class="mx-auto max-w-[1380px]">
+    <div class="chat-shell w-full">
       <div class="chat-workbench">
         <aside class="chat-sidebar">
           <div class="chat-sidebar__hero">
@@ -366,7 +388,7 @@ onMounted(() => {
                 />
                 <span>{{ headerStatusLabel }}</span>
               </div>
-              <h2 class="chat-stage__title">法律问答会话</h2>
+              <h2 class="chat-stage__title">{{ currentConversationTitle || '法律问答会话' }}</h2>
               <p class="chat-stage__hint">{{ headerHint }}</p>
             </div>
 
@@ -677,10 +699,15 @@ onMounted(() => {
     #fcfbf8;
 }
 
+.chat-shell {
+  min-height: 0;
+}
+
 .chat-workbench {
   display: grid;
   gap: 24px;
   align-items: stretch;
+  min-height: 0;
 }
 
 .chat-sidebar {
@@ -692,6 +719,7 @@ onMounted(() => {
   background: linear-gradient(180deg, rgba(247, 244, 238, 0.98), rgba(255, 255, 255, 0.94));
   padding: 24px;
   box-shadow: 0 20px 60px rgba(34, 24, 12, 0.06);
+  min-height: 0;
 }
 
 .chat-sidebar__hero {
@@ -826,6 +854,7 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 20px 60px rgba(34, 24, 12, 0.06);
   backdrop-filter: blur(12px);
+  min-height: 0;
 }
 
 .chat-stage__header {
@@ -890,6 +919,7 @@ onMounted(() => {
 
 .chat-feed {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 28px 24px 20px;
   background:
@@ -1381,8 +1411,27 @@ onMounted(() => {
 }
 
 @media (min-width: 1280px) {
+  .chat-page {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .chat-shell {
+    height: 100%;
+  }
+
   .chat-workbench {
+    height: 100%;
     grid-template-columns: 340px minmax(0, 1fr);
+  }
+
+  .chat-sidebar {
+    overflow-y: auto;
+  }
+
+  .chat-stage {
+    height: 100%;
+    min-height: 0;
   }
 }
 

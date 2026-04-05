@@ -88,6 +88,10 @@ export const useChatStore = defineStore("chat", () => {
   const messages = ref<ChatMessage[]>([]);
   const isResponding = ref(false);
   const abortController = shallowRef<AbortController | null>(null);
+  const threadId = ref<string | null>(null);
+
+  // Cache messages per thread so switching conversations is instant
+  const messageCache = new Map<string, ChatMessage[]>();
 
   const assistantMessages = computed(() =>
     messages.value.filter((message) => message.role === "assistant"),
@@ -185,6 +189,73 @@ export const useChatStore = defineStore("chat", () => {
     return lines.map((line) => line.slice(5).trimStart()).join("\n");
   }
 
+  /** Save current messages to cache for the given thread */
+  function cacheCurrentMessages() {
+    if (threadId.value && messages.value.length > 0) {
+      messageCache.set(threadId.value, [...messages.value]);
+    }
+  }
+
+  /** Load messages for a thread from cache or from the server */
+  async function loadMessages(targetThreadId: string) {
+    // Check local cache first
+    const cached = messageCache.get(targetThreadId);
+    if (cached) {
+      messages.value = [...cached];
+      return;
+    }
+
+    // Fetch from server
+    try {
+      const response = await fetch(
+        `${apiBase}/conversations/${targetThreadId}/messages`,
+      );
+      if (!response.ok) {
+        messages.value = [];
+        return;
+      }
+      const data = await response.json();
+      const serverMessages: ChatMessage[] = (data.messages ?? [])
+        .filter(
+          (m: { role: string; content: string }) =>
+            m.role === "user" || m.role === "assistant",
+        )
+        .map((m: { role: "user" | "assistant"; content: string; citations: AnswerCitation[]; meta: Record<string, unknown> }) => ({
+          id: createMessageId(m.role),
+          role: m.role,
+          text: m.content,
+          isThinking: false,
+          isStreaming: false,
+          steps: [],
+          citations: m.citations ?? [],
+          meta: m.meta ?? {},
+          trace: null,
+          error: null,
+        }));
+      messages.value = serverMessages;
+      messageCache.set(targetThreadId, [...serverMessages]);
+    } catch {
+      messages.value = [];
+    }
+  }
+
+  /** Switch to a different conversation */
+  async function switchConversation(targetThreadId: string | null) {
+    if (targetThreadId === threadId.value) return;
+
+    // Save current messages
+    cacheCurrentMessages();
+
+    if (!targetThreadId) {
+      threadId.value = null;
+      messages.value = [];
+      return;
+    }
+
+    threadId.value = targetThreadId;
+    await loadMessages(targetThreadId);
+  }
+
   async function ask() {
     const query = prompt.value.trim();
     if (!query) {
@@ -222,13 +293,14 @@ export const useChatStore = defineStore("chat", () => {
     abortController.value = controller;
 
     try {
-      const response = await fetch(`${apiBase}/chat/stream`, {
+      const response = await fetch(`${apiBase}/agent/stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           query,
+          thread_id: threadId.value,
           top_k: topK.value,
           document_ids: selectedDocumentIds.value,
         }),
@@ -237,6 +309,12 @@ export const useChatStore = defineStore("chat", () => {
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
+      }
+
+      // Capture thread_id from response header
+      const newThreadId = response.headers.get("x-thread-id");
+      if (newThreadId && !threadId.value) {
+        threadId.value = newThreadId;
       }
 
       if (!response.body) {
@@ -288,6 +366,9 @@ export const useChatStore = defineStore("chat", () => {
           );
         }
       }
+
+      // Cache the updated messages
+      cacheCurrentMessages();
     } catch (error) {
       const message = getMessageById(assistantMessage.id);
       if (message) {
@@ -317,8 +398,10 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   function reset() {
+    cacheCurrentMessages();
     abortController.value?.abort();
     messages.value = [];
+    threadId.value = null;
     isResponding.value = false;
     abortController.value = null;
   }
@@ -332,8 +415,12 @@ export const useChatStore = defineStore("chat", () => {
     lastAssistantMessage,
     isResponding,
     hasAnswered,
+    threadId,
     ask,
     stop,
     reset,
+    switchConversation,
+    loadMessages,
+    cacheCurrentMessages,
   };
 });

@@ -143,6 +143,7 @@ class Settings(BaseSettings):
     vector_parent_group_size: int = 4
     vector_search_top_k: int = 5
     vector_auto_merge_threshold: int = 2
+    agent_enabled: bool = Field(default=True, validation_alias="AGENT_ENABLED")
 
     @field_validator("frontend_origins", mode="before")
     @classmethod

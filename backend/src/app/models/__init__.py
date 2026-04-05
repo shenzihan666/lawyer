@@ -1,3 +1,4 @@
+from .conversation import ConversationMeta as ConversationMeta
 from .document import (
     DocumentAsset as DocumentAsset,
     DocumentChunk as DocumentChunk,

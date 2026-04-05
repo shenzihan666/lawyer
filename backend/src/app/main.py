@@ -1,4 +1,6 @@
+import asyncio
 import os
+import sys
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -11,6 +13,13 @@ from app.core.logging import configure_logging, get_logger, shutdown_logging
 from app.db.base import Base
 from app.db.session import get_engine, wait_for_database
 from app.middleware import add_request_logging_middleware
+
+
+# Configure event loop for Windows compatibility
+if sys.platform == "win32":
+    # On Windows, default to SelectorEventLoop for psycopg compatibility
+    # ProactorEventLoop (default on Windows) doesn't work with psycopg async connections
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 def create_app() -> FastAPI:
@@ -44,9 +53,32 @@ def create_app() -> FastAPI:
         wait_for_database()
         Base.metadata.create_all(bind=get_engine())
         logger.info("Database schema ready", extra={"event": "database_schema_ready"})
+
+        # Initialize LangGraph checkpointer for agent conversations
+        if settings.agent_enabled:
+            try:
+                from app.services.agent.checkpoint import get_checkpointer
+                await get_checkpointer()
+                logger.info("Agent checkpointer ready", extra={"event": "agent_ready"})
+            except Exception as exc:
+                logger.warning(
+                    "Agent checkpointer init failed, agent features disabled",
+                    extra={"event": "agent_init_failed", "error": str(exc)},
+                )
+
         try:
             yield
         finally:
+            if settings.agent_enabled:
+                try:
+                    from app.services.agent.checkpoint import close_checkpointer
+
+                    await close_checkpointer()
+                except Exception as exc:
+                    logger.warning(
+                        "Agent checkpointer shutdown failed",
+                        extra={"event": "agent_shutdown_failed", "error": str(exc)},
+                    )
             logger.info("Application shutdown", extra={"event": "application_shutdown"})
             shutdown_logging()
 
@@ -72,6 +104,10 @@ app = create_app()
 
 
 def main() -> None:
+    # Set event loop policy for Windows before uvicorn starts
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    
     settings = get_settings()
     configure_logging(settings)
     uvicorn.run(
