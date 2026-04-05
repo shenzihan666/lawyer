@@ -289,18 +289,14 @@ export const useContractReviewStore = defineStore("contractReview", () => {
   async function uploadTemplate(payload: {
     file: File;
     name: string;
-    category: string;
-    contractType: string;
     description: string;
-    configProfile: string;
   }) {
     const formData = new FormData();
     formData.append("file", payload.file);
     formData.append("name", payload.name.trim());
-    formData.append("category", payload.category.trim());
-    formData.append("contract_type", payload.contractType.trim());
-    formData.append("description", payload.description.trim());
-    formData.append("config_profile", payload.configProfile);
+    if (payload.description.trim()) {
+      formData.append("description", payload.description.trim());
+    }
 
     isUploadingTemplate.value = true;
     try {

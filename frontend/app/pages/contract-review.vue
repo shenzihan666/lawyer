@@ -24,10 +24,7 @@ const reviewName = ref("");
 const selectedTemplateId = ref("");
 const templateForm = reactive({
   name: "",
-  category: "通用合同",
-  contractType: "general",
   description: "",
-  configProfile: "general",
 });
 
 const tabs = [
@@ -36,14 +33,6 @@ const tabs = [
   { key: "template-upload", label: "上传模板", icon: "i-lucide-library-big" },
   { key: "template-list", label: "模板列表", icon: "i-lucide-list" },
 ] as const;
-
-const profiles = [
-  { label: "通用合同", value: "general" },
-  { label: "劳动合同", value: "employment" },
-  { label: "租赁合同", value: "lease" },
-  { label: "保密协议", value: "nda" },
-  { label: "买卖合同", value: "sales" },
-];
 
 const selectedJob = computed(
   () =>
@@ -131,10 +120,7 @@ async function submitTemplate() {
   await store.uploadTemplate({
     file: templateFile.value,
     name: templateForm.name,
-    category: templateForm.category,
-    contractType: templateForm.contractType,
     description: templateForm.description,
-    configProfile: templateForm.configProfile,
   });
   templateFile.value = null;
   templateForm.name = "";
@@ -514,7 +500,7 @@ onBeforeUnmount(() => {
             />
             <div>
               <p class="title">上传模板文件</p>
-              <p class="subtle">自由上传模板，并绑定一个首轮审查配置。</p>
+              <p class="subtle">仅需填写模板名称，可选补充模板说明。</p>
             </div>
           </label>
 
@@ -535,33 +521,20 @@ onBeforeUnmount(() => {
           <div class="fields">
             <div class="field">
               <label>模板名称</label>
-              <UInput v-model="templateForm.name" />
-            </div>
-            <div class="field">
-              <label>模板分类</label>
-              <UInput v-model="templateForm.category" />
-            </div>
-            <div class="field">
-              <label>合同类型</label>
-              <USelect
-                v-model="templateForm.contractType"
-                :items="profiles"
-                value-key="value"
-              />
-            </div>
-            <div class="field">
-              <label>配置档位</label>
-              <USelect
-                v-model="templateForm.configProfile"
-                :items="profiles"
-                value-key="value"
+              <UInput
+                v-model="templateForm.name"
+                placeholder="请输入模板名称"
               />
             </div>
           </div>
 
           <div class="field">
-            <label>模板说明</label>
-            <UTextarea v-model="templateForm.description" :rows="4" />
+            <label>模板说明（可选）</label>
+            <UTextarea
+              v-model="templateForm.description"
+              :rows="4"
+              placeholder="可补充模板用途、适用场景等"
+            />
           </div>
 
           <div class="actions">

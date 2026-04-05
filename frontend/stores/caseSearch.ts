@@ -137,13 +137,8 @@ export const useCaseSearchStore = defineStore("case-search", () => {
         next[existing] = payload.item;
         searches.value = next;
       }
-      const firstHit = payload.hits[0];
-      if (firstHit) {
-        await selectHit(firstHit.id, { quiet: true });
-      } else {
-        activeHitId.value = null;
-        preview.value = null;
-      }
+      activeHitId.value = null;
+      preview.value = null;
       return payload;
     } catch (error) {
       if (!options?.quiet) {
@@ -187,13 +182,8 @@ export const useCaseSearchStore = defineStore("case-search", () => {
       detail.value = payload;
       activeSearchId.value = payload.item.id;
       searches.value = [payload.item, ...searches.value.filter((item) => item.id !== payload.item.id)];
-      const firstHit = payload.hits[0];
-      if (firstHit) {
-        await selectHit(firstHit.id, { quiet: true, preloaded: payload });
-      } else {
-        preview.value = null;
-        activeHitId.value = null;
-      }
+      preview.value = null;
+      activeHitId.value = null;
       if (mode.value === "upload") {
         pendingFile.value = null;
       }

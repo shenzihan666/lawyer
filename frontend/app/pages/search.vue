@@ -15,15 +15,9 @@ const {
   selectedDocumentIds,
   searches,
   detail,
-  preview,
   activeSearchId,
-  activeHitId,
-  previewTab,
-  activeHit,
   isCreating,
   isLoadingHistory,
-  isLoadingDetail,
-  isLoadingPreview,
 } = storeToRefs(caseSearchStore);
 
 const indexedDocuments = computed(() =>
@@ -41,15 +35,6 @@ const topKOptions = [3, 5, 8, 10].map((value) => ({
   label: `${value} 条案件`,
   value,
 }));
-const apiOrigin = (useRuntimeConfig().public.apiBase as string).replace(
-  /\/api\/v1$/,
-  "",
-);
-
-const selectedHitPages = computed(() => new Set(activeHit.value?.matched_pages ?? []));
-const selectedHitChunkIds = computed(
-  () => new Set(activeHit.value?.matched_chunk_ids ?? []),
-);
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -68,12 +53,6 @@ function formatFileSize(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function resolveApiUrl(path: string | null | undefined) {
-  if (!path) return null;
-  if (/^https?:\/\//.test(path)) return path;
-  return `${apiOrigin}${path}`;
-}
-
 function onFileChange(event: Event) {
   const input = event.target as HTMLInputElement;
   caseSearchStore.setPendingFile(input.files?.[0] ?? null);
@@ -85,8 +64,14 @@ async function handleSelectHistory(searchId: string) {
 }
 
 async function handleSelectHit(hitId: number) {
-  previewTab.value = "structured";
-  await caseSearchStore.selectHit(hitId);
+  if (!detail.value) return;
+  await navigateTo({
+    path: "/search-result",
+    query: {
+      searchId: detail.value.item.id,
+      hitId: String(hitId),
+    },
+  });
 }
 
 onMounted(async () => {
@@ -106,24 +91,7 @@ onMounted(async () => {
     <section class="case-search-hero">
       <div>
         <p class="case-search-hero__eyebrow">Case Retrieval Desk</p>
-        <h1>真类案检索</h1>
-        <p class="case-search-hero__copy">
-          输入案情描述或上传待比对案件，系统会从已向量化知识库中按案件级别返回相似案件，保留历史并支持网页端预览。
-        </p>
-      </div>
-      <div class="case-search-metrics">
-        <div class="metric-card">
-          <span>已索引知识库</span>
-          <strong>{{ indexedDocuments.length }} 份</strong>
-        </div>
-        <div class="metric-card">
-          <span>检索历史</span>
-          <strong>{{ searches.length }} 条</strong>
-        </div>
-        <div class="metric-card">
-          <span>当前结果</span>
-          <strong>{{ detail?.hits.length ?? 0 }} 条</strong>
-        </div>
+        <h1>类案检索</h1>
       </div>
     </section>
 
@@ -175,7 +143,7 @@ onMounted(async () => {
               <UIcon name="i-lucide-file-up" class="h-8 w-8 text-[#3158ff]" />
               <div>
                 <p class="upload-dropzone__title">上传待比对案件</p>
-                <p class="upload-dropzone__copy">支持 PDF、Word、Excel。文件会保存在类案检索历史中，但不会进入知识库。</p>
+                <p class="upload-dropzone__copy">支持 PDF、Word、Excel。</p>
               </div>
             </label>
 
@@ -286,7 +254,6 @@ onMounted(async () => {
             v-for="hit in detail.hits"
             :key="hit.id"
             class="result-card"
-            :class="{ 'result-card--active': activeHitId === hit.id }"
             @click="handleSelectHit(hit.id)"
           >
             <div class="result-card__header">
@@ -325,116 +292,6 @@ onMounted(async () => {
           </div>
         </section>
       </main>
-
-      <aside class="case-panel case-panel--preview">
-        <section class="case-block case-block--preview-head">
-          <div class="case-block__header">
-            <div>
-              <p class="case-block__eyebrow">Preview</p>
-              <h2>{{ activeHit?.original_filename || '案件预览' }}</h2>
-            </div>
-            <UBadge v-if="activeHit" color="warning" variant="subtle">
-              {{ activeHit.matched_chunk_count }} 命中
-            </UBadge>
-          </div>
-
-          <div v-if="activeHit" class="preview-tabbar">
-            <button
-              type="button"
-              class="preview-tabbar__item"
-              :class="{ 'preview-tabbar__item--active': previewTab === 'structured' }"
-              @click="previewTab = 'structured'"
-            >
-              结构化预览
-            </button>
-            <button
-              type="button"
-              class="preview-tabbar__item"
-              :class="{ 'preview-tabbar__item--active': previewTab === 'original' }"
-              @click="previewTab = 'original'"
-            >
-              原文件预览
-            </button>
-          </div>
-        </section>
-
-        <section v-if="isLoadingPreview || isLoadingDetail" class="empty-state">
-          正在整理案件预览，请稍候...
-        </section>
-
-        <section v-else-if="!activeHit || !preview" class="empty-state">
-          点击中间任一结果案件后，这里会显示结构化正文、命中页码高亮，以及原文件在线预览。
-        </section>
-
-        <section v-else-if="previewTab === 'structured'" class="preview-stack">
-          <div class="preview-summary-card">
-            <div class="preview-summary-card__meta">
-              <span>{{ preview.original_filename }}</span>
-              <span>{{ preview.file_extension }}</span>
-            </div>
-            <p class="preview-summary-card__excerpt">{{ preview.preview_excerpt }}</p>
-          </div>
-
-          <div class="match-chip-row">
-            <span v-for="page in activeHit.matched_pages" :key="page" class="match-chip">第 {{ page }} 页</span>
-          </div>
-
-          <article
-            v-for="fragment in preview.fragments"
-            :key="`${fragment.fragment_index}-${fragment.page_number}`"
-            class="fragment-card"
-            :class="{
-              'fragment-card--matched': selectedHitPages.has(fragment.page_number),
-              'fragment-card--focused': fragment.metadata?.chunk_id && selectedHitChunkIds.has(String(fragment.metadata.chunk_id)),
-            }"
-          >
-            <div class="fragment-card__meta">
-              <span>片段 {{ fragment.fragment_index + 1 }}</span>
-              <span>{{ fragment.page_number ? `第 ${fragment.page_number} 页` : '未分页' }}</span>
-            </div>
-            <p>{{ fragment.content }}</p>
-          </article>
-        </section>
-
-        <section v-else class="original-preview-shell">
-          <div class="original-preview-card">
-            <p class="original-preview-card__copy">
-              当前预览状态：{{ preview.preview_status }}
-            </p>
-            <div class="original-preview-card__actions">
-              <a
-                class="preview-link"
-                :href="resolveApiUrl(preview.file_url) || '#'
-                "
-                target="_blank"
-                rel="noreferrer"
-              >
-                下载原文件
-              </a>
-              <a
-                v-if="resolveApiUrl(preview.preview_url)"
-                class="preview-link preview-link--primary"
-                :href="resolveApiUrl(preview.preview_url) || '#'
-                "
-                target="_blank"
-                rel="noreferrer"
-              >
-                新窗口打开预览
-              </a>
-            </div>
-          </div>
-
-          <iframe
-            v-if="resolveApiUrl(preview.preview_url)"
-            class="original-preview-frame"
-            :src="resolveApiUrl(preview.preview_url) || undefined"
-            title="案件原文件预览"
-          />
-          <div v-else class="empty-state empty-state--flat">
-            当前文件预览尚不可用。系统会优先展示结构化正文，你仍然可以下载原文件查看。
-          </div>
-        </section>
-      </aside>
     </div>
   </div>
 </template>
@@ -454,7 +311,6 @@ onMounted(async () => {
 .case-search-hero,
 .case-panel,
 .mode-switcher,
-.metric-card,
 .history-card,
 .result-card,
 .preview-summary-card,
@@ -523,30 +379,6 @@ onMounted(async () => {
   max-width: 860px;
 }
 
-.case-search-metrics {
-  display: grid;
-  gap: 12px;
-}
-
-.metric-card {
-  border-radius: 24px;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.metric-card span {
-  display: block;
-  font-size: 12px;
-  color: #8f877a;
-}
-
-.metric-card strong {
-  display: block;
-  margin-top: 10px;
-  font-size: 1.15rem;
-  color: #18181b;
-}
-
 .case-search-layout {
   display: grid;
   gap: 18px;
@@ -558,8 +390,7 @@ onMounted(async () => {
 }
 
 .case-panel--sidebar,
-.case-panel--results,
-.case-panel--preview {
+.case-panel--results {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -573,8 +404,7 @@ onMounted(async () => {
 }
 
 .case-block--history,
-.case-panel--results,
-.case-panel--preview {
+.case-panel--results {
   min-height: 0;
 }
 
@@ -607,8 +437,7 @@ onMounted(async () => {
   background: rgba(247, 243, 236, 0.96);
 }
 
-.mode-switcher__item,
-.preview-tabbar__item {
+.mode-switcher__item {
   appearance: none;
   border: 1px solid transparent;
   border-radius: 16px;
@@ -619,15 +448,13 @@ onMounted(async () => {
   transition: 0.18s ease;
 }
 
-.mode-switcher__item--active,
-.preview-tabbar__item--active {
+.mode-switcher__item--active {
   border-color: #3158ff;
   background: rgba(243, 247, 255, 0.92);
   color: #3158ff;
 }
 
 .field-stack,
-.preview-stack,
 .result-stack,
 .history-list,
 .top-chunk-list,
@@ -785,56 +612,6 @@ onMounted(async () => {
   box-shadow: 0 0 0 3px rgba(49, 88, 255, 0.08);
 }
 
-.match-chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.match-chip {
-  background: rgba(49, 88, 255, 0.1);
-  color: #3158ff;
-  padding: 6px 10px;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.preview-tabbar {
-  display: flex;
-  gap: 8px;
-}
-
-.original-preview-shell {
-  display: grid;
-  gap: 12px;
-  min-height: 0;
-}
-
-.preview-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 38px;
-  border-radius: 999px;
-  border: 1px solid #d6dce7;
-  padding: 0 14px;
-  color: #44506a;
-  text-decoration: none;
-}
-
-.preview-link--primary {
-  border-color: #3158ff;
-  color: #3158ff;
-}
-
-.original-preview-frame {
-  width: 100%;
-  min-height: 720px;
-  border: 1px solid #e9e0d0;
-  border-radius: 24px;
-  background: white;
-}
-
 .empty-state {
   border: 1px dashed #ded3c2;
   border-radius: 24px;
@@ -848,31 +625,19 @@ onMounted(async () => {
 
 @media (min-width: 1100px) {
   .case-search-hero {
-    grid-template-columns: minmax(0, 1.5fr) 360px;
     align-items: start;
   }
 
-  .case-search-metrics {
-    grid-template-columns: 1fr;
-  }
-
   .case-search-layout {
-    grid-template-columns: 320px minmax(0, 1fr) 430px;
+    grid-template-columns: 320px minmax(0, 1fr);
     align-items: start;
   }
 
   .case-panel--sidebar,
-  .case-panel--results,
-  .case-panel--preview {
+  .case-panel--results {
     position: sticky;
     top: 24px;
     max-height: calc(100vh - 48px);
-  }
-}
-
-@media (max-width: 1099px) {
-  .case-search-metrics {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -885,15 +650,6 @@ onMounted(async () => {
   .case-panel {
     border-radius: 26px;
     padding: 18px;
-  }
-
-  .case-search-metrics {
-    grid-template-columns: 1fr;
-  }
-
-  .preview-tabbar {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>
