@@ -15,7 +15,7 @@ const renameDraft = ref("");
 
 const navItems = [
   { label: "知识库", path: "/documents", icon: "i-lucide-book-open" },
-  { label: "智能检索", path: "/search", icon: "i-lucide-search" },
+  { label: "类案检索", path: "/search", icon: "i-lucide-search" },
   { label: "合同审查", path: "/contract-review", icon: "i-lucide-file-signature" },
   { label: "对方观点预判", path: "/opponent-analysis", icon: "i-lucide-shield-question" },
 ];

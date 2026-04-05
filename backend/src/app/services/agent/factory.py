@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
+from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
@@ -11,28 +13,72 @@ from app.services.agent.tools import legal_knowledge_search
 logger = logging.getLogger(__name__)
 
 LEGAL_SYSTEM_PROMPT = """\
-你是法律知识库问答助手。你必须严格依据给定来源作答，不能编造法条、案号、事实或结论。
+You are a legal knowledge base assistant.
 
-当你需要检索法律知识库来回答问题时，使用 legal_knowledge_search 工具。
-该工具会执行向量检索、重排序、并生成带引用编号的答案。
+You must answer strictly based on the retrieved sources and never invent laws,
+case numbers, facts, or conclusions.
 
-核心要求：
-1. 只能使用知识库返回的来源编号进行引用。
-2. 优先直接回答，再说明依据。
-3. 如果信息不足，请明确说明信息不足。
-4. 你可以连续多次调用检索工具来补充信息。
-5. 对用户保持专业、严谨的法律咨询态度。
-6. 使用中文回答。
+When you need evidence from the knowledge base, use the
+`legal_knowledge_search` tool. The tool performs retrieval, reranking, and
+returns a grounded answer with citations.
+
+Core rules:
+1. Only cite source numbers returned by the knowledge base.
+2. Answer directly first, then explain the supporting basis.
+3. If the available information is insufficient, say so explicitly.
+4. You may call the retrieval tool multiple times when needed.
+5. Stay professional and cautious.
+6. Always answer in Chinese.
+7. If the current request already limits document scope or source count, you
+   must respect those constraints and never broaden them on your own.
 """
+
+
+def _build_legal_search_tool(
+    default_top_k: int = 5,
+    default_document_ids: list[str] | None = None,
+):
+    """Create a request-scoped search tool so UI retrieval settings always apply."""
+
+    scoped_top_k = max(1, min(int(default_top_k), 10))
+    scoped_document_ids = [doc_id for doc_id in (default_document_ids or []) if doc_id]
+
+    @tool("legal_knowledge_search")
+    def request_scoped_legal_knowledge_search(
+        query: str,
+        top_k: int | None = None,
+        document_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Search the legal knowledge base with request-scoped retrieval defaults."""
+
+        effective_top_k = scoped_top_k
+        effective_document_ids = (
+            scoped_document_ids if scoped_document_ids else (document_ids or [])
+        )
+        return legal_knowledge_search.invoke(
+            {
+                "query": query,
+                "top_k": effective_top_k,
+                "document_ids": effective_document_ids,
+            }
+        )
+
+    return request_scoped_legal_knowledge_search
 
 
 def create_lawyer_agent(
     checkpointer: AsyncPostgresSaver,
+    default_top_k: int = 5,
+    default_document_ids: list[str] | None = None,
 ):
     """Create and return a compiled Deep Agent for legal Q&A."""
     from deepagents import create_deep_agent
 
     settings = get_settings()
+    legal_search_tool = _build_legal_search_tool(
+        default_top_k=default_top_k,
+        default_document_ids=default_document_ids,
+    )
 
     model = ChatOpenAI(
         model=settings.answer_generation_model or "gpt-4o",
@@ -45,18 +91,18 @@ def create_lawyer_agent(
     try:
         agent = create_deep_agent(
             model=model,
-            tools=[legal_knowledge_search],
+            tools=[legal_search_tool],
             system_prompt=LEGAL_SYSTEM_PROMPT,
             checkpointer=checkpointer,
         )
     except TypeError as exc:
-        # create_deep_agent may not accept all kwargs — try minimal call
         logger.warning(
-            "create_deep_agent() rejected kwargs, falling back: %s", exc,
+            "create_deep_agent() rejected kwargs, falling back: %s",
+            exc,
         )
         agent = create_deep_agent(
             model=model,
-            tools=[legal_knowledge_search],
+            tools=[legal_search_tool],
             system_prompt=LEGAL_SYSTEM_PROMPT,
         )
 
@@ -65,6 +111,8 @@ def create_lawyer_agent(
         extra={
             "event": "agent_created",
             "model": settings.answer_generation_model,
+            "default_top_k": default_top_k,
+            "default_document_ids_count": len(default_document_ids or []),
         },
     )
     return agent

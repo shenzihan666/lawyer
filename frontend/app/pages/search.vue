@@ -33,6 +33,7 @@ const topKOptions = [3, 5, 8, 10].map((value) => ({
   value,
 }));
 
+const pageTitle = "类案检索";
 const resultCountLabel = computed(() => `${results.value.length} 条结果`);
 
 function formatScore(score: number) {
@@ -47,8 +48,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#fcfbf8] px-4 py-6 md:px-8 md:py-8">
-    <div class="mx-auto max-w-6xl space-y-6">
+  <div class="min-h-screen bg-[#fcfbf8] px-4 py-4 md:px-6 md:py-6 xl:px-8">
+    <div class="mx-auto max-w-[1440px] space-y-5">
       <div
         class="rounded-[28px] border border-[#e8e1d6] bg-white px-6 py-6 shadow-[0_20px_60px_rgba(34,24,12,0.06)]"
       >
@@ -60,7 +61,7 @@ onMounted(() => {
         >
           <div>
             <h1 class="text-2xl font-semibold tracking-tight text-zinc-950">
-              智能检索
+              {{ pageTitle }}
             </h1>
             <p class="mt-1 text-sm text-zinc-500">
               使用 Milvus 混合检索已索引文档，支持按文档范围过滤结果。
@@ -72,9 +73,9 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <div class="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)]">
         <UCard
-          class="rounded-[28px] ring-1 ring-[#ebe5da] shadow-[0_20px_60px_rgba(34,24,12,0.05)]"
+          class="rounded-[28px] ring-1 ring-[#ebe5da] shadow-[0_20px_60px_rgba(34,24,12,0.05)] lg:sticky lg:top-6 lg:self-start"
         >
           <template #header>
             <div>
@@ -207,14 +208,14 @@ onMounted(() => {
 
           <div
             v-if="!hasSearched"
-            class="py-16 text-center text-sm text-zinc-400"
+            class="py-10 text-center text-sm text-zinc-400 md:py-12"
           >
             输入检索问题后，这里会显示命中的 chunk 内容。
           </div>
 
           <div
             v-else-if="!results.length"
-            class="py-16 text-center text-sm text-zinc-400"
+            class="py-10 text-center text-sm text-zinc-400 md:py-12"
           >
             没有检索到结果，试试换个问题或放宽文档过滤条件。
           </div>

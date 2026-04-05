@@ -14,9 +14,10 @@ const {
   isLoadingTemplates,
   isUploadingTemplate,
   deletingTemplateIds,
+  deletingJobIds,
 } = storeToRefs(store);
 
-const acceptedFormats = ".pdf,.doc,.docx";
+const acceptedFormats = ".pdf,.docx";
 const reviewFile = ref<File | null>(null);
 const templateFile = ref<File | null>(null);
 const reviewName = ref("");
@@ -32,7 +33,8 @@ const templateForm = reactive({
 const tabs = [
   { key: "launch", label: "发起审查", icon: "i-lucide-rocket" },
   { key: "results", label: "审查结果", icon: "i-lucide-file-search" },
-  { key: "templates", label: "模板库", icon: "i-lucide-library" },
+  { key: "template-upload", label: "上传模板", icon: "i-lucide-library-big" },
+  { key: "template-list", label: "模板列表", icon: "i-lucide-list" },
 ] as const;
 
 const profiles = [
@@ -93,6 +95,14 @@ function getFindingColor(status: string, severity: string) {
   return "neutral";
 }
 
+function isJobRemovable(status: string) {
+  return !["queued", "running"].includes(status);
+}
+
+function getRemoveJobHint(status: string) {
+  return isJobRemovable(status) ? "移除任务" : "审查进行中，暂不可移除";
+}
+
 function onReviewFileChange(event: Event) {
   const input = event.target as HTMLInputElement;
   reviewFile.value = input.files?.[0] ?? null;
@@ -127,6 +137,15 @@ async function submitTemplate() {
   templateForm.description = "";
 }
 
+async function handleDeleteJob(jobId: string) {
+  if (
+    !window.confirm("移除后会删除该任务及其导出结果，确定继续吗？")
+  ) {
+    return;
+  }
+  await store.deleteJob(jobId);
+}
+
 onMounted(async () => {
   await Promise.all([store.fetchTemplates(), store.fetchJobs()]);
   const firstTemplate = templates.value[0];
@@ -147,15 +166,11 @@ onBeforeUnmount(() => {
 <template>
   <div class="page-shell px-4 py-6 md:px-8 md:py-8">
     <section class="hero">
-      <div>
-        <p class="eyebrow">Contract Review Workspace</p>
-        <h1>合同审查工作台</h1>
-        <p class="copy">
-          在不影响原有知识库、检索和问答流程的前提下，集中完成合同上传、模板匹配、
-          结构化审查、结果复核与 DOCX 导出。
-        </p>
+      <div class="hero-copy">
+        <p class="eyebrow">Contract Review</p>
+        <h1>合同审查</h1>
       </div>
-      <div class="stats">
+      <div class="stats hero-stats">
         <div class="stat">
           <span>模板库</span>
           <strong>{{ templates.length }} 个模板</strong>
@@ -171,16 +186,17 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <div class="tabs">
+    <div class="tabs" role="tablist" aria-label="合同审查导航">
       <button
         v-for="tab in tabs"
         :key="tab.key"
+        type="button"
         class="tab"
         :class="{ 'tab--active': activeTab === tab.key }"
         @click="activeTab = tab.key"
       >
         <UIcon :name="tab.icon" class="h-4 w-4" />
-        {{ tab.label }}
+        <span>{{ tab.label }}</span>
       </button>
     </div>
 
@@ -254,7 +270,7 @@ onBeforeUnmount(() => {
             <UButton
               color="neutral"
               variant="ghost"
-              @click="activeTab = 'templates'"
+              @click="activeTab = 'template-upload'"
               >管理模板</UButton
             >
             <UButton
@@ -288,31 +304,47 @@ onBeforeUnmount(() => {
 
         <div v-if="!jobs.length" class="empty">还没有合同审查任务。</div>
         <div v-else class="stack">
-          <button
+          <article
             v-for="job in jobs"
             :key="job.id"
-            class="list-card"
+            class="list-card list-card--task"
             :class="{ 'list-card--active': selectedJob?.id === job.id }"
-            @click="store.selectJob(job.id)"
           >
-            <div class="card-head">
-              <div>
-                <p class="title">{{ job.review_name }}</p>
-                <p class="subtle">
-                  {{ job.template_name || "未命名模板" }} ·
-                  {{ formatDate(job.created_at) }}
-                </p>
+            <button
+              type="button"
+              class="list-card__button"
+              @click="store.selectJob(job.id)"
+            >
+              <div class="card-head">
+                <div>
+                  <p class="title">{{ job.review_name }}</p>
+                  <p class="subtle">
+                    {{ job.template_name || "未命名模板" }} ·
+                    {{ formatDate(job.created_at) }}
+                  </p>
+                </div>
+                <UBadge
+                  :color="getStatusColor(job.status) as any"
+                  variant="subtle"
+                  size="sm"
+                >
+                  {{ getStatusLabel(job.status) }}
+                </UBadge>
               </div>
-              <UBadge
-                :color="getStatusColor(job.status) as any"
-                variant="subtle"
-                size="sm"
-              >
-                {{ getStatusLabel(job.status) }}
-              </UBadge>
-            </div>
-            <p class="subtle">{{ job.original_filename }}</p>
-          </button>
+              <p class="subtle">{{ job.original_filename }}</p>
+            </button>
+            <UButton
+              icon="i-lucide-trash-2"
+              color="error"
+              variant="ghost"
+              size="xs"
+              class="list-card__action"
+              :title="getRemoveJobHint(job.status)"
+              :disabled="!isJobRemovable(job.status)"
+              :loading="deletingJobIds.includes(job.id)"
+              @click.stop="handleDeleteJob(job.id)"
+            />
+          </article>
         </div>
       </UCard>
     </section>
@@ -463,31 +495,48 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </template>
-        <div class="stack">
-          <button
+        <div v-if="!jobs.length" class="empty">当前没有可查看的审查任务。</div>
+        <div v-else class="stack">
+          <article
             v-for="job in jobs"
             :key="job.id"
-            class="list-card"
+            class="list-card list-card--task"
             :class="{ 'list-card--active': selectedJob?.id === job.id }"
-            @click="store.selectJob(job.id)"
           >
-            <div class="card-head">
-              <p class="title">{{ job.review_name }}</p>
-              <UBadge
-                :color="getStatusColor(job.status) as any"
-                variant="subtle"
-                size="xs"
-              >
-                {{ getStatusLabel(job.status) }}
-              </UBadge>
-            </div>
-            <p class="subtle">{{ job.original_filename }}</p>
-          </button>
+            <button
+              type="button"
+              class="list-card__button"
+              @click="store.selectJob(job.id)"
+            >
+              <div class="card-head">
+                <p class="title">{{ job.review_name }}</p>
+                <UBadge
+                  :color="getStatusColor(job.status) as any"
+                  variant="subtle"
+                  size="xs"
+                >
+                  {{ getStatusLabel(job.status) }}
+                </UBadge>
+              </div>
+              <p class="subtle">{{ job.original_filename }}</p>
+            </button>
+            <UButton
+              icon="i-lucide-trash-2"
+              color="error"
+              variant="ghost"
+              size="xs"
+              class="list-card__action"
+              :title="getRemoveJobHint(job.status)"
+              :disabled="!isJobRemovable(job.status)"
+              :loading="deletingJobIds.includes(job.id)"
+              @click.stop="handleDeleteJob(job.id)"
+            />
+          </article>
         </div>
       </UCard>
     </section>
 
-    <section v-else class="grid-layout">
+    <section v-else-if="activeTab === 'template-upload'">
       <UCard class="card">
         <template #header>
           <div class="card-head">
@@ -581,7 +630,9 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </UCard>
+    </section>
 
+    <section v-else-if="activeTab === 'template-list'">
       <UCard class="card">
         <template #header>
           <div class="card-head">
@@ -647,8 +698,9 @@ onBeforeUnmount(() => {
       transparent 32%
     ),
     linear-gradient(180deg, #f8f5ee, #fbfaf7);
-  display: grid;
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 .hero,
 .card,
@@ -657,7 +709,7 @@ onBeforeUnmount(() => {
 .pill,
 .panel,
 .stat,
-.tab {
+.tabs {
   border: 1px solid #e8dfd0;
   background: rgba(255, 255, 255, 0.84);
   box-shadow: 0 20px 48px rgba(34, 24, 12, 0.06);
@@ -668,13 +720,20 @@ onBeforeUnmount(() => {
 }
 .hero {
   display: grid;
-  gap: 24px;
-  padding: 28px;
+  gap: 20px;
+  padding: 16px 24px 18px;
   background: linear-gradient(
     135deg,
     rgba(255, 255, 255, 0.96),
     rgba(250, 246, 238, 0.94)
   );
+}
+.hero-copy {
+  display: grid;
+  align-content: start;
+}
+.hero-stats {
+  align-self: start;
 }
 .eyebrow {
   font-size: 11px;
@@ -701,8 +760,8 @@ strong {
   color: #665f55;
 }
 .copy {
-  margin-top: 14px;
-  max-width: 860px;
+  margin-top: 12px;
+  max-width: 820px;
 }
 .stats,
 .fields,
@@ -730,21 +789,39 @@ strong {
 .tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  align-items: center;
+  align-self: start;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.78);
 }
 .tab {
-  border-radius: 999px;
-  padding: 10px 16px;
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  height: 56px;
+  padding: 12px 18px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 132px;
+  background: transparent;
   color: #5a5a55;
+  font-weight: 600;
+  white-space: nowrap;
   transition: 0.18s;
 }
 .tab--active {
   border-color: #3158ff;
   color: #3158ff;
-  background: linear-gradient(135deg, #f8fbff, #fff);
+  background: rgba(243, 247, 255, 0.92);
+  box-shadow: none;
 }
 .card {
   padding: 0;
@@ -783,6 +860,28 @@ strong {
 .list-card {
   transition: 0.18s;
   text-align: left;
+}
+.list-card--task {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 12px 12px 16px;
+}
+.list-card__button {
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.list-card__action {
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 .list-card--active {
   border-color: #3158ff;
@@ -827,7 +926,7 @@ strong {
 @media (min-width: 960px) {
   .hero {
     grid-template-columns: minmax(0, 1.5fr) 320px;
-    align-items: end;
+    align-items: start;
   }
   .stats,
   .future {

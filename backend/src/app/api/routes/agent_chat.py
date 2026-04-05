@@ -188,7 +188,11 @@ async def agent_chat_stream(
         )
 
     checkpointer = await get_checkpointer()
-    agent = create_lawyer_agent(checkpointer)
+    agent = create_lawyer_agent(
+        checkpointer,
+        default_top_k=request.top_k,
+        default_document_ids=request.document_ids,
+    )
 
     is_new = not request.thread_id
     thread_id = request.thread_id or str(uuid4())

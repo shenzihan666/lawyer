@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__web-reader__webReader",
+      "mcp__web-search-prime__web_search_prime",
+      "WebSearch",
+      "mcp__zai-mcp-server__analyze_image",
+      "Bash(find /d/Project/lawyer/backend/src/app/services -name \"*.py\" -exec wc -l {} +)",
+      "Bash(wc -l /d/Project/lawyer/backend/src/app/**/*.py)",
+      "Bash(python -c \" import sys content = open\\('backend/src/app/main.py'\\).read_text\\(\\)\")",
+      "Bash(.venv/Scripts/python -c \"from psycopg_pool import AsyncConnectionPool; print\\('AsyncConnectionPool available'\\)\")",
+      "Bash(.venv/Scripts/python -c \"from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver; print\\('AsyncPostgresSaver available'\\)\")",
+      "Bash(.venv/Scripts/python -c ':*)",
+      "Bash(.venv/Scripts/python -c \"import psycopg_pool; print\\('psycopg_pool version:', psycopg_pool.__version__\\)\")"
+    ]
+  }
+}

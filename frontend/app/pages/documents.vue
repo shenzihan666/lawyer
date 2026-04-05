@@ -18,7 +18,7 @@ const trackedVectorizationDocuments = computed(() => {
   return documents.value.filter((item) => trackedIds.has(item.id));
 });
 
-const acceptedFormats = ".pdf,.doc,.docx,.xls,.xlsx";
+const acceptedFormats = ".pdf,.docx,.xls,.xlsx";
 
 const dateFormatter = computed(
   () =>

@@ -16,6 +16,7 @@ from app.schemas.contract_review import (
     ReviewJobDetailResponse,
     ReviewJobItem,
     ReviewJobListResponse,
+    ReviewJobOperationResponse,
     ReviewTemplateItem,
     ReviewTemplateListResponse,
     ReviewTemplateOperationResponse,
@@ -24,6 +25,7 @@ from app.services.contract_review.executor import submit_review_job
 from app.services.contract_review.profiles import get_profile_config
 from app.services.contract_review.storage import ContractReviewStorage
 from app.services.loaders import registry
+from app.services.loaders.base import UnsupportedDocumentTypeError
 
 
 class ContractReviewService:
@@ -52,7 +54,7 @@ class ContractReviewService:
                 detail="Template file is missing a filename.",
             )
 
-        registry.get_loader_name_for_suffix(Path(file.filename).suffix.lower())
+        self._get_loader_name_for_upload(file.filename)
         stored_file = self.storage.save_upload(file, "templates")
 
         duplicate = self.db.scalar(
@@ -122,7 +124,7 @@ class ContractReviewService:
             )
 
         template = self._get_template(template_id)
-        registry.get_loader_name_for_suffix(Path(file.filename).suffix.lower())
+        self._get_loader_name_for_upload(file.filename)
         stored_file = self.storage.save_upload(file, "reviews")
         job = ContractReviewJob(
             id=str(uuid4()),
@@ -163,20 +165,7 @@ class ContractReviewService:
 
     def get_job_detail(self, job_id: str) -> ReviewJobDetailResponse:
         self.db.expire_all()
-        job = self.db.scalar(
-            select(ContractReviewJob)
-            .options(
-                joinedload(ContractReviewJob.template),
-                joinedload(ContractReviewJob.clauses),
-                joinedload(ContractReviewJob.findings).joinedload(ContractReviewFinding.clause),
-            )
-            .where(ContractReviewJob.id == job_id)
-        )
-        if job is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Review job not found.",
-            )
+        job = self._get_job(job_id, with_detail=True)
 
         export_path = job.result_snapshot_json.get("export_path")
         export_available = False
@@ -197,6 +186,30 @@ class ContractReviewService:
                 else None,
             ),
             extensions=job.result_snapshot_json.get("extensions", {}),
+        )
+
+    def delete_job(self, job_id: str) -> ReviewJobOperationResponse:
+        job = self._get_job(job_id)
+        if job.status in {
+            ContractReviewJobStatus.queued.value,
+            ContractReviewJobStatus.running.value,
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Running review jobs cannot be removed yet.",
+            )
+
+        export_path = job.result_snapshot_json.get("export_path")
+        if isinstance(export_path, str) and export_path:
+            self.storage.delete_file(export_path)
+        self.storage.delete_file(job.storage_path)
+
+        self.db.delete(job)
+        self.db.commit()
+
+        return ReviewJobOperationResponse(
+            items=[self._to_job_item(item) for item in self._fetch_jobs()],
+            affected_ids=[job_id],
         )
 
     def get_export_path(self, job_id: str) -> Path:
@@ -232,7 +245,7 @@ class ContractReviewService:
             if not source_path.exists():
                 continue
 
-            registry.get_loader_name_for_suffix(source_path.suffix.lower())
+            self._get_loader_name_for_upload(source_path.name)
             stored_file = self.storage.import_file(
                 source_path,
                 "templates",
@@ -305,6 +318,29 @@ class ContractReviewService:
             )
         return template
 
+    def _get_job(
+        self, job_id: str, *, with_detail: bool = False
+    ) -> ContractReviewJob:
+        statement = select(ContractReviewJob)
+        if with_detail:
+            statement = statement.options(
+                joinedload(ContractReviewJob.template),
+                joinedload(ContractReviewJob.clauses),
+                joinedload(ContractReviewJob.findings).joinedload(
+                    ContractReviewFinding.clause
+                ),
+            )
+        else:
+            statement = statement.options(joinedload(ContractReviewJob.template))
+
+        job = self.db.scalar(statement.where(ContractReviewJob.id == job_id))
+        if job is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Review job not found.",
+            )
+        return job
+
     def _to_template_item(self, template: ContractReviewTemplate) -> ReviewTemplateItem:
         return ReviewTemplateItem.model_validate(template)
 
@@ -320,6 +356,16 @@ class ContractReviewService:
         payload["page_start"] = finding.clause.page_start if finding.clause else None
         payload["page_end"] = finding.clause.page_end if finding.clause else None
         return ReviewFindingItem(**payload)
+
+    @staticmethod
+    def _get_loader_name_for_upload(filename: str) -> str:
+        try:
+            return registry.get_loader_name_for_suffix(Path(filename).suffix.lower())
+        except UnsupportedDocumentTypeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
 
     @staticmethod
     def _utcnow():

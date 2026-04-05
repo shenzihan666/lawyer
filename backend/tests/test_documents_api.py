@@ -127,3 +127,13 @@ def test_search_route(client, monkeypatch) -> None:
     payload = response.json()
     assert payload["items"][0]["content"] == "match for 合同违约"
     assert payload["meta"]["retrieval_mode"] == "hybrid"
+
+
+def test_upload_rejects_legacy_doc_file(client) -> None:
+    response = client.post(
+        "/api/v1/documents/upload",
+        files=[("files", ("legacy.doc", b"fake doc bytes", "application/msword"))],
+    )
+
+    assert response.status_code == 400
+    assert ".docx" in response.json()["detail"]

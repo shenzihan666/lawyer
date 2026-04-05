@@ -113,6 +113,10 @@ type ReviewJobListResponse = {
   items: ReviewJobItem[];
 };
 
+type ReviewJobOperationResponse = ReviewJobListResponse & {
+  affected_ids?: string[];
+};
+
 export const useContractReviewStore = defineStore("contractReview", () => {
   const runtimeConfig = useRuntimeConfig();
   const apiBase = runtimeConfig.public.apiBase as string;
@@ -121,7 +125,9 @@ export const useContractReviewStore = defineStore("contractReview", () => {
   const templates = ref<ReviewTemplateItem[]>([]);
   const jobs = ref<ReviewJobItem[]>([]);
   const activeJobId = ref<string | null>(null);
-  const activeTab = ref<"launch" | "results" | "templates">("launch");
+  const activeTab = ref<
+    "launch" | "results" | "template-upload" | "template-list"
+  >("launch");
   const detail = ref<ReviewJobDetail | null>(null);
 
   const isLoadingTemplates = ref(false);
@@ -130,6 +136,7 @@ export const useContractReviewStore = defineStore("contractReview", () => {
   const isCreatingJob = ref(false);
   const isUploadingTemplate = ref(false);
   const deletingTemplateIds = ref<string[]>([]);
+  const deletingJobIds = ref<string[]>([]);
 
   let pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -350,6 +357,46 @@ export const useContractReviewStore = defineStore("contractReview", () => {
     }
   }
 
+  async function deleteJob(jobId: string) {
+    deletingJobIds.value = [...deletingJobIds.value, jobId];
+    const isCurrentJob =
+      activeJobId.value === jobId || detail.value?.job.id === jobId;
+
+    try {
+      const response = await request<ReviewJobOperationResponse>(
+        `/contract-review/jobs/${jobId}`,
+        {
+          method: "DELETE",
+        },
+      );
+      jobs.value = response.items;
+
+      if (isCurrentJob) {
+        stopPolling();
+        detail.value = null;
+        activeJobId.value = jobs.value[0]?.id ?? null;
+        if (activeJobId.value) {
+          await fetchJobDetail(activeJobId.value, { quiet: true });
+        }
+      }
+
+      toast.add({
+        title: "\u4efb\u52a1\u5df2\u79fb\u9664",
+        description: "\u5408\u540c\u5ba1\u67e5\u4efb\u52a1\u5df2\u4ece\u5217\u8868\u4e2d\u5220\u9664\u3002",
+        color: "success",
+      });
+    } catch (error) {
+      toast.add({
+        title: "\u79fb\u9664\u4efb\u52a1\u5931\u8d25",
+        description: String(error),
+        color: "error",
+      });
+      throw error;
+    } finally {
+      deletingJobIds.value = deletingJobIds.value.filter((id) => id !== jobId);
+    }
+  }
+
   function selectJob(jobId: string) {
     activeJobId.value = jobId;
     activeTab.value = "results";
@@ -381,12 +428,14 @@ export const useContractReviewStore = defineStore("contractReview", () => {
     isCreatingJob,
     isUploadingTemplate,
     deletingTemplateIds,
+    deletingJobIds,
     fetchTemplates,
     fetchJobs,
     fetchJobDetail,
     createReviewJob,
     uploadTemplate,
     deleteTemplate,
+    deleteJob,
     selectJob,
     downloadExport,
     stopPolling,

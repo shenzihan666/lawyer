@@ -42,7 +42,7 @@ def test_first_message_creates_conversation_and_schedules_ai_title(
     monkeypatch.setattr(
         factory_module,
         "create_lawyer_agent",
-        lambda checkpointer: _FakeAgent(),
+        lambda checkpointer, default_top_k=5, default_document_ids=None: _FakeAgent(),
     )
     monkeypatch.setattr(
         agent_chat_module,
@@ -104,7 +104,7 @@ def test_existing_placeholder_conversation_schedules_ai_title_on_first_message(
     monkeypatch.setattr(
         factory_module,
         "create_lawyer_agent",
-        lambda checkpointer: _FakeAgent(),
+        lambda checkpointer, default_top_k=5, default_document_ids=None: _FakeAgent(),
     )
     monkeypatch.setattr(
         agent_chat_module,
@@ -144,6 +144,53 @@ def test_translate_event_emits_result_for_dict_tool_output() -> None:
     assert translated is not None
     assert translated["type"] == "result"
     assert translated["citations"][0]["chunk_id"] == "chunk-1"
+
+
+def test_agent_stream_passes_retrieval_settings_into_agent_factory(
+    client, monkeypatch
+) -> None:
+    from app.api.routes import agent_chat as agent_chat_module
+    from app.services.agent import checkpoint as checkpoint_module
+    from app.services.agent import factory as factory_module
+
+    captured: dict[str, object] = {}
+
+    async def fake_get_checkpointer():
+        return object()
+
+    def fake_create_lawyer_agent(
+        checkpointer,
+        default_top_k=5,
+        default_document_ids=None,
+    ):
+        captured["checkpointer"] = checkpointer
+        captured["default_top_k"] = default_top_k
+        captured["default_document_ids"] = default_document_ids
+        return _FakeAgent()
+
+    monkeypatch.setattr(checkpoint_module, "get_checkpointer", fake_get_checkpointer)
+    monkeypatch.setattr(
+        factory_module,
+        "create_lawyer_agent",
+        fake_create_lawyer_agent,
+    )
+    monkeypatch.setattr(
+        agent_chat_module,
+        "_schedule_title_generation",
+        lambda thread_id, query: None,
+    )
+
+    with client.stream(
+        "POST",
+        "/api/v1/agent/stream",
+        json={"query": QUERY, "top_k": 8, "document_ids": ["doc-1", "doc-2"]},
+    ) as response:
+        body = "".join(response.iter_text())
+
+    assert response.status_code == 200
+    assert "data: [DONE]" in body
+    assert captured["default_top_k"] == 8
+    assert captured["default_document_ids"] == ["doc-1", "doc-2"]
 
 
 def test_translate_event_emits_result_for_json_string_tool_output() -> None:

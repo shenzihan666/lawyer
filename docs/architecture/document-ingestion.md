@@ -9,7 +9,7 @@ Normalize different office document formats into a common raw fragment model tha
 | Format | Extensions | Loader | Normalization Rule |
 | --- | --- | --- | --- |
 | PDF | `.pdf` | `PyPDFLoader` | one fragment per page, `page_number` is meaningful |
-| Word | `.docx`, `.doc` | `Docx2txtLoader` | full document as one fragment, `page_number = 0` |
+| Word | `.docx` | `Docx2txtLoader` | full document as one fragment, `page_number = 0` |
 | Excel | `.xlsx`, `.xls` | `UnstructuredExcelLoader` | extracted cell/table text, normalized to `page_number = 0` |
 
 ## Normalized Output Model

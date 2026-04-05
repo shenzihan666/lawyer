@@ -128,3 +128,7 @@ class ReviewJobDetailResponse(BaseModel):
 
 class ReviewJobListResponse(BaseModel):
     items: list[ReviewJobItem]
+
+
+class ReviewJobOperationResponse(ReviewJobListResponse):
+    affected_ids: list[str] = Field(default_factory=list)

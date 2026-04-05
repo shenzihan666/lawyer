@@ -6,6 +6,7 @@ from app.db.session import get_db
 from app.schemas.contract_review import (
     ReviewJobDetailResponse,
     ReviewJobListResponse,
+    ReviewJobOperationResponse,
     ReviewTemplateListResponse,
     ReviewTemplateOperationResponse,
 )
@@ -79,6 +80,14 @@ def get_job_detail(
     service: ContractReviewService = Depends(get_contract_review_service),
 ) -> ReviewJobDetailResponse:
     return service.get_job_detail(job_id)
+
+
+@router.delete("/jobs/{job_id}", response_model=ReviewJobOperationResponse)
+def delete_job(
+    job_id: str,
+    service: ContractReviewService = Depends(get_contract_review_service),
+) -> ReviewJobOperationResponse:
+    return service.delete_job(job_id)
 
 
 @router.get("/jobs/{job_id}/export.docx")
