@@ -23,6 +23,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
+def _normalize_message_role(role: object, msg: object) -> str:
+    normalized = str(role or "").strip().lower()
+    if normalized in {"user", "assistant", "system", "tool"}:
+        return normalized
+    if normalized == "human":
+        return "user"
+    if normalized == "ai":
+        return "assistant"
+
+    msg_type = str(getattr(msg, "type", "") or "").strip().lower()
+    if msg_type == "human":
+        return "user"
+    if msg_type == "ai":
+        return "assistant"
+    if msg_type in {"system", "tool"}:
+        return msg_type
+
+    return normalized or "unknown"
+
+
 def _meta_to_response(meta: ConversationMeta) -> ConversationResponse:
     return ConversationResponse(
         thread_id=meta.thread_id,
@@ -144,12 +164,12 @@ async def get_conversation_messages(thread_id: str):
     messages: list[MessageItem] = []
     for msg in messages_raw:
         if isinstance(msg, dict):
-            role = msg.get("role", "unknown")
+            role = _normalize_message_role(msg.get("role"), msg)
             content = msg.get("content", "")
             tool_calls = msg.get("tool_calls")
             name = msg.get("name")
         else:
-            role = getattr(msg, "role", "unknown")
+            role = _normalize_message_role(getattr(msg, "role", None), msg)
             content = getattr(msg, "content", "")
             tool_calls = getattr(msg, "tool_calls", None)
             name = getattr(msg, "name", None)
