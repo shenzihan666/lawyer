@@ -39,8 +39,7 @@ function isEditingConversation(threadId: string) {
 }
 
 async function handleNewConversation() {
-  chatStore.reset();
-  conversationsStore.setActive(null);
+  chatStore.startNewConversation();
   if (route.path !== "/chat") {
     await navigateTo("/chat");
   }
@@ -48,8 +47,6 @@ async function handleNewConversation() {
 }
 
 async function handleSelectConversation(threadId: string) {
-  if (route.path === "/chat" && activeThreadId.value === threadId) return;
-  conversationsStore.setActive(threadId);
   await chatStore.switchConversation(threadId);
   if (route.path !== "/chat") {
     await navigateTo("/chat");
@@ -58,9 +55,13 @@ async function handleSelectConversation(threadId: string) {
 }
 
 async function handleDeleteConversation(threadId: string) {
+  chatStore.removeConversation(threadId);
   await conversationsStore.deleteConversation(threadId);
   if (activeThreadId.value === null) {
-    chatStore.reset();
+    chatStore.startNewConversation();
+    if (route.path !== "/chat") {
+      await navigateTo("/chat");
+    }
   }
 }
 
@@ -119,6 +120,10 @@ async function handleRenameKeydown(event: KeyboardEvent, threadId: string) {
 
 function handleNavigate() {
   uiStore.closeMobile();
+}
+
+function isConversationBusy(threadId: string) {
+  return chatStore.isConversationResponding(threadId);
 }
 
 function formatTime(dateStr: string) {
@@ -237,7 +242,13 @@ watch(
                 {{ item.title }}
               </div>
               <div class="mt-0.5 text-[11px] text-zinc-400">
-                {{ formatTime(item.updated_at) }}
+                <span v-if="isConversationBusy(item.thread_id)" class="inline-flex items-center gap-1 text-[#3158ff]">
+                  <span class="h-1.5 w-1.5 rounded-full bg-[#3158ff] animate-pulse" />
+                  回复中
+                </span>
+                <span v-else>
+                  {{ formatTime(item.updated_at) }}
+                </span>
               </div>
             </div>
 

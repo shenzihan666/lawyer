@@ -17,13 +17,38 @@ export const useConversationsStore = defineStore("conversations", () => {
   const activeThreadId = ref<string | null>(null);
   const isLoading = ref(false);
 
+  function sortConversations(items: Conversation[]) {
+    return [...items].sort(
+      (left, right) =>
+        new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
+    );
+  }
+
+  function upsertConversation(conversation: Conversation) {
+    const index = conversations.value.findIndex(
+      (item) => item.thread_id === conversation.thread_id,
+    );
+
+    if (index === -1) {
+      conversations.value = sortConversations([conversation, ...conversations.value]);
+      return;
+    }
+
+    const next = [...conversations.value];
+    next[index] = {
+      ...next[index],
+      ...conversation,
+    };
+    conversations.value = sortConversations(next);
+  }
+
   async function fetchConversations() {
     isLoading.value = true;
     try {
       const response = await fetch(`${apiBase}/conversations`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      conversations.value = data.items ?? [];
+      conversations.value = sortConversations(data.items ?? []);
     } catch {
       conversations.value = [];
     } finally {
@@ -40,7 +65,7 @@ export const useConversationsStore = defineStore("conversations", () => {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const threadId: string = data.thread_id;
-    conversations.value.unshift(data);
+    upsertConversation(data);
     return threadId;
   }
 
@@ -62,10 +87,7 @@ export const useConversationsStore = defineStore("conversations", () => {
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = (await response.json()) as Conversation;
-    const index = conversations.value.findIndex((c) => c.thread_id === threadId);
-    if (index !== -1) {
-      conversations.value[index] = data;
-    }
+    upsertConversation(data);
   }
 
   function setActive(threadId: string | null) {
@@ -86,5 +108,6 @@ export const useConversationsStore = defineStore("conversations", () => {
     renameConversation,
     setActive,
     refreshList,
+    upsertConversation,
   };
 });

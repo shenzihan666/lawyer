@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from uuid import uuid4
@@ -9,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.db.session import get_session_factory
 from app.db.session import get_db
 from app.models.conversation import ConversationMeta
 from app.schemas.conversation import AgentChatRequest
@@ -16,6 +18,22 @@ from app.schemas.conversation import AgentChatRequest
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agent", tags=["agent"])
+
+DEFAULT_CONVERSATION_TITLE = "新对话"
+
+
+def _parse_tool_output(output: object) -> dict | None:
+    if isinstance(output, dict):
+        return output
+
+    if isinstance(output, str):
+        try:
+            parsed = json.loads(output)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
+    return None
 
 
 def _translate_event(event: dict) -> dict | None:
@@ -67,10 +85,11 @@ def _translate_event(event: dict) -> dict | None:
         tool_name = event.get("name", "")
         if tool_name == "legal_knowledge_search":
             output = event.get("data", {}).get("output")
-            if isinstance(output, dict):
+            parsed_output = _parse_tool_output(output)
+            if isinstance(parsed_output, dict):
                 return {
                     "type": "result",
-                    **output,
+                    **parsed_output,
                 }
             return {
                 "type": "rag_step",
@@ -129,6 +148,29 @@ async def _generate_title(query: str) -> str:
         return query[:20] + ("..." if len(query) > 20 else "")
 
 
+async def _generate_and_store_title(thread_id: str, query: str) -> None:
+    """Generate a title asynchronously without delaying the first stream response."""
+    try:
+        title = (await _generate_title(query)).strip()
+        if not title:
+            return
+
+        session = get_session_factory()()
+        try:
+            meta = session.query(ConversationMeta).filter_by(thread_id=thread_id).first()
+            if meta and meta.title == DEFAULT_CONVERSATION_TITLE:
+                meta.title = title[:255]
+                session.commit()
+        finally:
+            session.close()
+    except Exception as exc:
+        logger.warning("Async title generation failed: %s", exc)
+
+
+def _schedule_title_generation(thread_id: str, query: str) -> None:
+    asyncio.create_task(_generate_and_store_title(thread_id, query))
+
+
 @router.post("/stream")
 async def agent_chat_stream(
     request: AgentChatRequest,
@@ -155,11 +197,12 @@ async def agent_chat_stream(
     if is_new:
         meta = ConversationMeta(
             thread_id=thread_id,
-            title=await _generate_title(request.query),
+            title=DEFAULT_CONVERSATION_TITLE,
             last_message_preview=request.query[:200],
         )
         db.add(meta)
         db.commit()
+        _schedule_title_generation(thread_id, request.query)
 
     async def event_generator():
         import traceback as tb_module

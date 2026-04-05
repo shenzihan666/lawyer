@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { useConversationsStore } from "./conversations";
 
 export type AnswerCitation = {
   citation_number: number;
@@ -69,6 +70,16 @@ type StreamEvent =
   | StreamContentEvent
   | StreamErrorEvent;
 
+type ConversationRuntimeState = {
+  threadId: string | null;
+  messages: ChatMessage[];
+  isResponding: boolean;
+  abortController: AbortController | null;
+  hasLoadedHistory: boolean;
+};
+
+const DEFAULT_CONVERSATION_TITLE = "新对话";
+
 function createMessageId(role: "user" | "assistant") {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return `${role}-${crypto.randomUUID()}`;
@@ -77,21 +88,69 @@ function createMessageId(role: "user" | "assistant") {
   return `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function createDraftSessionKey() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `draft-${crypto.randomUUID()}`;
+  }
+
+  return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function createConversationState(threadId: string | null): ConversationRuntimeState {
+  return {
+    threadId,
+    messages: [],
+    isResponding: false,
+    abortController: null,
+    hasLoadedHistory: false,
+  };
+}
+
 export const useChatStore = defineStore("chat", () => {
   const runtimeConfig = useRuntimeConfig();
   const apiBase = runtimeConfig.public.apiBase as string;
   const toast = useToast();
+  const conversationsStore = useConversationsStore();
 
   const prompt = ref("");
   const topK = ref(5);
   const selectedDocumentIds = ref<string[]>([]);
-  const messages = ref<ChatMessage[]>([]);
-  const isResponding = ref(false);
-  const abortController = shallowRef<AbortController | null>(null);
-  const threadId = ref<string | null>(null);
 
-  // Cache messages per thread so switching conversations is instant
-  const messageCache = new Map<string, ChatMessage[]>();
+  const sessionStates = ref<Record<string, ConversationRuntimeState>>({});
+  const activeSessionKey = ref(createDraftSessionKey());
+  sessionStates.value[activeSessionKey.value] = createConversationState(null);
+
+  function ensureSessionState(sessionKey: string, threadId: string | null = null) {
+    const existing = sessionStates.value[sessionKey];
+    if (existing) {
+      if (threadId !== null && existing.threadId !== threadId) {
+        existing.threadId = threadId;
+      }
+      return existing;
+    }
+
+    const state = createConversationState(threadId);
+    sessionStates.value[sessionKey] = state;
+    return state;
+  }
+
+  function findSessionKeyByThreadId(targetThreadId: string) {
+    for (const [sessionKey, state] of Object.entries(sessionStates.value)) {
+      if (state.threadId === targetThreadId || sessionKey === targetThreadId) {
+        return sessionKey;
+      }
+    }
+
+    return null;
+  }
+
+  function getActiveState() {
+    return ensureSessionState(activeSessionKey.value);
+  }
+
+  const messages = computed(() => getActiveState().messages);
+  const isResponding = computed(() => getActiveState().isResponding);
+  const threadId = computed(() => getActiveState().threadId);
 
   const assistantMessages = computed(() =>
     messages.value.filter((message) => message.role === "assistant"),
@@ -110,6 +169,12 @@ export const useChatStore = defineStore("chat", () => {
     ),
   );
 
+  const respondingThreadIds = computed(() =>
+    Object.values(sessionStates.value)
+      .filter((state) => state.isResponding && state.threadId)
+      .map((state) => state.threadId as string),
+  );
+
   function createAssistantMessage(): ChatMessage {
     return {
       id: createMessageId("assistant"),
@@ -125,12 +190,39 @@ export const useChatStore = defineStore("chat", () => {
     };
   }
 
-  function getMessageById(messageId: string) {
-    return messages.value.find((message) => message.id === messageId) ?? null;
+  function upsertConversationSnapshot(
+    targetThreadId: string,
+    query: string,
+    state: ConversationRuntimeState,
+  ) {
+    const now = new Date().toISOString();
+    const existing = conversationsStore.conversations.find(
+      (item) => item.thread_id === targetThreadId,
+    );
+
+    conversationsStore.upsertConversation({
+      thread_id: targetThreadId,
+      title: existing?.title || DEFAULT_CONVERSATION_TITLE,
+      created_at: existing?.created_at || now,
+      updated_at: now,
+      message_count: Math.max(existing?.message_count ?? 0, state.messages.length),
+      last_message_preview: query.slice(0, 200),
+    });
   }
 
-  function applyStreamEvent(messageId: string, event: StreamEvent | string) {
-    const message = getMessageById(messageId);
+  function getMessageById(
+    state: ConversationRuntimeState,
+    messageId: string,
+  ) {
+    return state.messages.find((message) => message.id === messageId) ?? null;
+  }
+
+  function applyStreamEvent(
+    state: ConversationRuntimeState,
+    messageId: string,
+    event: StreamEvent | string,
+  ) {
+    const message = getMessageById(state, messageId);
     if (!message) return;
 
     if (typeof event === "string") {
@@ -189,71 +281,115 @@ export const useChatStore = defineStore("chat", () => {
     return lines.map((line) => line.slice(5).trimStart()).join("\n");
   }
 
-  /** Save current messages to cache for the given thread */
-  function cacheCurrentMessages() {
-    if (threadId.value && messages.value.length > 0) {
-      messageCache.set(threadId.value, [...messages.value]);
+  function renameSessionKey(oldKey: string, newThreadId: string) {
+    if (oldKey === newThreadId) {
+      const current = ensureSessionState(oldKey, newThreadId);
+      current.threadId = newThreadId;
+      return newThreadId;
     }
+
+    const current = ensureSessionState(oldKey, newThreadId);
+    const existingTarget = sessionStates.value[newThreadId];
+    const nextState = existingTarget ?? current;
+    nextState.threadId = newThreadId;
+
+    if (existingTarget && existingTarget !== current) {
+      if (!existingTarget.messages.length && current.messages.length) {
+        existingTarget.messages = current.messages;
+      }
+      existingTarget.isResponding = current.isResponding;
+      existingTarget.abortController = current.abortController;
+      existingTarget.hasLoadedHistory =
+        existingTarget.hasLoadedHistory || current.hasLoadedHistory;
+    } else {
+      sessionStates.value[newThreadId] = current;
+    }
+
+    delete sessionStates.value[oldKey];
+
+    if (activeSessionKey.value === oldKey) {
+      activeSessionKey.value = newThreadId;
+    }
+
+    return newThreadId;
   }
 
-  /** Load messages for a thread from cache or from the server */
-  async function loadMessages(targetThreadId: string) {
-    // Check local cache first
-    const cached = messageCache.get(targetThreadId);
-    if (cached) {
-      messages.value = [...cached];
+  async function loadMessagesForState(
+    sessionKey: string,
+    targetThreadId: string,
+  ) {
+    const state = ensureSessionState(sessionKey, targetThreadId);
+    if (state.hasLoadedHistory || state.isResponding || state.messages.length > 0) {
       return;
     }
 
-    // Fetch from server
     try {
       const response = await fetch(
         `${apiBase}/conversations/${targetThreadId}/messages`,
       );
       if (!response.ok) {
-        messages.value = [];
+        state.messages = [];
         return;
       }
+
       const data = await response.json();
-      const serverMessages: ChatMessage[] = (data.messages ?? [])
+      state.messages = (data.messages ?? [])
         .filter(
-          (m: { role: string; content: string }) =>
-            m.role === "user" || m.role === "assistant",
+          (message: { role: string; content: string }) =>
+            message.role === "user" || message.role === "assistant",
         )
-        .map((m: { role: "user" | "assistant"; content: string; citations: AnswerCitation[]; meta: Record<string, unknown> }) => ({
-          id: createMessageId(m.role),
-          role: m.role,
-          text: m.content,
-          isThinking: false,
-          isStreaming: false,
-          steps: [],
-          citations: m.citations ?? [],
-          meta: m.meta ?? {},
-          trace: null,
-          error: null,
-        }));
-      messages.value = serverMessages;
-      messageCache.set(targetThreadId, [...serverMessages]);
+        .map(
+          (message: {
+            role: "user" | "assistant";
+            content: string;
+            citations: AnswerCitation[];
+            meta: Record<string, unknown>;
+          }) => ({
+            id: createMessageId(message.role),
+            role: message.role,
+            text: message.content,
+            isThinking: false,
+            isStreaming: false,
+            steps: [],
+            citations: message.citations ?? [],
+            meta: message.meta ?? {},
+            trace: null,
+            error: null,
+          }),
+        );
+      state.hasLoadedHistory = true;
     } catch {
-      messages.value = [];
+      state.messages = [];
     }
   }
 
-  /** Switch to a different conversation */
+  function startNewConversation() {
+    const current = getActiveState();
+    if (!current.threadId && !current.isResponding && current.messages.length === 0) {
+      conversationsStore.setActive(null);
+      return activeSessionKey.value;
+    }
+
+    const sessionKey = createDraftSessionKey();
+    ensureSessionState(sessionKey, null);
+    activeSessionKey.value = sessionKey;
+    conversationsStore.setActive(null);
+    prompt.value = "";
+    return sessionKey;
+  }
+
   async function switchConversation(targetThreadId: string | null) {
-    if (targetThreadId === threadId.value) return;
-
-    // Save current messages
-    cacheCurrentMessages();
-
     if (!targetThreadId) {
-      threadId.value = null;
-      messages.value = [];
+      startNewConversation();
       return;
     }
 
-    threadId.value = targetThreadId;
-    await loadMessages(targetThreadId);
+    const existingSessionKey =
+      findSessionKeyByThreadId(targetThreadId) ?? targetThreadId;
+    ensureSessionState(existingSessionKey, targetThreadId);
+    activeSessionKey.value = existingSessionKey;
+    conversationsStore.setActive(targetThreadId);
+    await loadMessagesForState(existingSessionKey, targetThreadId);
   }
 
   async function ask() {
@@ -267,9 +403,16 @@ export const useChatStore = defineStore("chat", () => {
       return;
     }
 
-    if (isResponding.value) {
+    const sessionKeyAtStart = activeSessionKey.value;
+    const state = ensureSessionState(sessionKeyAtStart);
+    if (state.isResponding) {
       return;
     }
+
+    const existingThreadId = state.threadId;
+    const isNewConversation = !existingThreadId;
+    let resolvedThreadId = existingThreadId;
+    let resolvedSessionKey = sessionKeyAtStart;
 
     const userMessage: ChatMessage = {
       id: createMessageId("user"),
@@ -285,12 +428,12 @@ export const useChatStore = defineStore("chat", () => {
     };
     const assistantMessage = createAssistantMessage();
 
-    messages.value.push(userMessage, assistantMessage);
+    state.messages.push(userMessage, assistantMessage);
+    state.isResponding = true;
     prompt.value = "";
-    isResponding.value = true;
 
     const controller = new AbortController();
-    abortController.value = controller;
+    state.abortController = controller;
 
     try {
       const response = await fetch(`${apiBase}/agent/stream`, {
@@ -300,7 +443,7 @@ export const useChatStore = defineStore("chat", () => {
         },
         body: JSON.stringify({
           query,
-          thread_id: threadId.value,
+          thread_id: existingThreadId,
           top_k: topK.value,
           document_ids: selectedDocumentIds.value,
         }),
@@ -311,10 +454,22 @@ export const useChatStore = defineStore("chat", () => {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      // Capture thread_id from response header
-      const newThreadId = response.headers.get("x-thread-id");
-      if (newThreadId && !threadId.value) {
-        threadId.value = newThreadId;
+      const responseThreadId = response.headers.get("x-thread-id");
+      if (responseThreadId) {
+        resolvedThreadId = responseThreadId;
+        resolvedSessionKey = renameSessionKey(sessionKeyAtStart, responseThreadId);
+        const currentState = ensureSessionState(resolvedSessionKey, responseThreadId);
+        currentState.threadId = responseThreadId;
+        upsertConversationSnapshot(responseThreadId, query, currentState);
+
+        if (activeSessionKey.value === resolvedSessionKey) {
+          conversationsStore.setActive(responseThreadId);
+        }
+      } else if (existingThreadId) {
+        upsertConversationSnapshot(existingThreadId, query, state);
+        if (activeSessionKey.value === sessionKeyAtStart) {
+          conversationsStore.setActive(existingThreadId);
+        }
       }
 
       if (!response.body) {
@@ -341,10 +496,16 @@ export const useChatStore = defineStore("chat", () => {
 
           const data = parseSseBlock(block);
           if (data) {
+            const latestState = ensureSessionState(
+              resolvedSessionKey,
+              resolvedThreadId,
+            );
+
             if (data === "[DONE]") {
-              applyStreamEvent(assistantMessage.id, data);
+              applyStreamEvent(latestState, assistantMessage.id, data);
             } else {
               applyStreamEvent(
+                latestState,
                 assistantMessage.id,
                 JSON.parse(data) as StreamEvent,
               );
@@ -357,20 +518,24 @@ export const useChatStore = defineStore("chat", () => {
 
       const trailingData = parseSseBlock(buffer);
       if (trailingData) {
+        const latestState = ensureSessionState(
+          resolvedSessionKey,
+          resolvedThreadId,
+        );
+
         if (trailingData === "[DONE]") {
-          applyStreamEvent(assistantMessage.id, trailingData);
+          applyStreamEvent(latestState, assistantMessage.id, trailingData);
         } else {
           applyStreamEvent(
+            latestState,
             assistantMessage.id,
             JSON.parse(trailingData) as StreamEvent,
           );
         }
       }
-
-      // Cache the updated messages
-      cacheCurrentMessages();
     } catch (error) {
-      const message = getMessageById(assistantMessage.id);
+      const latestState = ensureSessionState(resolvedSessionKey, resolvedThreadId);
+      const message = getMessageById(latestState, assistantMessage.id);
       if (message) {
         message.isThinking = false;
         message.isStreaming = false;
@@ -388,22 +553,66 @@ export const useChatStore = defineStore("chat", () => {
         });
       }
     } finally {
-      isResponding.value = false;
-      abortController.value = null;
+      const latestState = ensureSessionState(resolvedSessionKey, resolvedThreadId);
+
+      latestState.isResponding = false;
+      latestState.abortController = null;
+      latestState.hasLoadedHistory = latestState.hasLoadedHistory || Boolean(latestState.threadId);
+
+      if (latestState.threadId) {
+        upsertConversationSnapshot(latestState.threadId, query, latestState);
+        void conversationsStore.refreshList();
+
+        if (isNewConversation && import.meta.client) {
+          window.setTimeout(() => {
+            void conversationsStore.refreshList();
+          }, 1200);
+        }
+      }
     }
   }
 
   function stop() {
-    abortController.value?.abort();
+    getActiveState().abortController?.abort();
+  }
+
+  function isConversationResponding(targetThreadId: string) {
+    const sessionKey = findSessionKeyByThreadId(targetThreadId);
+    return sessionKey ? ensureSessionState(sessionKey).isResponding : false;
+  }
+
+  function removeConversation(threadIdToRemove: string) {
+    const sessionKey = findSessionKeyByThreadId(threadIdToRemove);
+    if (!sessionKey) {
+      return;
+    }
+
+    const state = ensureSessionState(sessionKey);
+    state.abortController?.abort();
+
+    if (activeSessionKey.value === sessionKey) {
+      delete sessionStates.value[sessionKey];
+      const draftKey = createDraftSessionKey();
+      activeSessionKey.value = draftKey;
+      sessionStates.value[draftKey] = createConversationState(null);
+      conversationsStore.setActive(null);
+      prompt.value = "";
+      return;
+    }
+
+    delete sessionStates.value[sessionKey];
   }
 
   function reset() {
-    cacheCurrentMessages();
-    abortController.value?.abort();
-    messages.value = [];
-    threadId.value = null;
-    isResponding.value = false;
-    abortController.value = null;
+    for (const state of Object.values(sessionStates.value)) {
+      state.abortController?.abort();
+    }
+
+    sessionStates.value = {};
+    activeSessionKey.value = createDraftSessionKey();
+    sessionStates.value[activeSessionKey.value] = createConversationState(null);
+    prompt.value = "";
+    selectedDocumentIds.value = [];
   }
 
   return {
@@ -416,11 +625,13 @@ export const useChatStore = defineStore("chat", () => {
     isResponding,
     hasAnswered,
     threadId,
+    respondingThreadIds,
     ask,
     stop,
     reset,
+    startNewConversation,
     switchConversation,
-    loadMessages,
-    cacheCurrentMessages,
+    isConversationResponding,
+    removeConversation,
   };
 });

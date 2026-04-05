@@ -168,10 +168,6 @@ async function submitQuestion() {
   }
 
   await chatStore.ask();
-  if (threadId.value) {
-    conversationsStore.setActive(threadId.value);
-  }
-  await conversationsStore.refreshList();
   await nextTick();
   autoResizeComposer();
   scrollFeedToBottom();
@@ -426,10 +422,7 @@ onMounted(async () => {
               <div class="welcome-state__icon">
                 <UIcon name="i-lucide-message-circle-heart" class="h-10 w-10" />
               </div>
-              <h3>开始一轮带引用的法律问答</h3>
-              <p>
-                发送问题后，页面会按聊天流展示你的提问、检索步骤、系统回答，以及每条引用对应的证据卡片。
-              </p>
+              <h3>有什么我能帮你的吗？</h3>
 
               <div class="welcome-prompts">
                 <div class="prompt-card">
