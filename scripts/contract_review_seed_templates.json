@@ -1,0 +1,82 @@
+[
+  {
+    "name": "通用保密协议模板",
+    "category": "商业合作",
+    "contract_type": "nda",
+    "description": "适用于常见商业合作场景的保密协议模板。",
+    "config_profile": "nda",
+    "source_path": "Resource/law_documents/sample/01股权合同/6. 保密协议.doc"
+  },
+  {
+    "name": "劳动合同模板",
+    "category": "人力资源",
+    "contract_type": "employment",
+    "description": "适用于用工关系基础审查的劳动合同模板。",
+    "config_profile": "employment",
+    "source_path": "Resource/law_documents/sample/01股权合同/5. 劳动合同.doc"
+  },
+  {
+    "name": "房屋租赁合同模板 A",
+    "category": "租赁合同",
+    "contract_type": "lease",
+    "description": "适用于房屋租赁场景的基础模板。",
+    "config_profile": "lease",
+    "source_path": "Resource/law_documents/sample/02购销合同/房屋租赁合同(A).doc"
+  },
+  {
+    "name": "租赁合同完整版模板",
+    "category": "租赁合同",
+    "contract_type": "lease",
+    "description": "包含较完整条款的租赁合同模板。",
+    "config_profile": "lease",
+    "source_path": "Resource/law_documents/sample/01股权合同/9. 租赁合同（完整版）.doc"
+  },
+  {
+    "name": "买卖合同模板",
+    "category": "购销合同",
+    "contract_type": "sales",
+    "description": "适用于普通货物买卖场景的基础模板。",
+    "config_profile": "sales",
+    "source_path": "Resource/law_documents/sample/02购销合同/买卖合同.doc"
+  },
+  {
+    "name": "设备买卖合同模板",
+    "category": "购销合同",
+    "contract_type": "sales",
+    "description": "适用于设备销售和采购场景。",
+    "config_profile": "sales",
+    "source_path": "Resource/law_documents/sample/02购销合同/设备买卖合同.doc"
+  },
+  {
+    "name": "软件开发外包合同模板",
+    "category": "技术服务",
+    "contract_type": "general",
+    "description": "适用于软件开发外包与技术合作。",
+    "config_profile": "general",
+    "source_path": "Resource/law_documents/sample/93 技术外包协议/软件开发外包合同.doc"
+  },
+  {
+    "name": "加盟合同模板",
+    "category": "加盟合作",
+    "contract_type": "general",
+    "description": "适用于加盟合作和特许经营场景。",
+    "config_profile": "general",
+    "source_path": "Resource/law_documents/sample/92 加盟合同/加盟合同.doc"
+  },
+  {
+    "name": "法律顾问合同模板",
+    "category": "法律服务",
+    "contract_type": "general",
+    "description": "适用于常年法律顾问合作。",
+    "config_profile": "general",
+    "source_path": "Resource/law_documents/sample/90 其它合同/聘请法律顾问合同.doc"
+  },
+  {
+    "name": "股权代持协议模板",
+    "category": "股权合同",
+    "contract_type": "general",
+    "description": "适用于股权代持与投资合作场景。",
+    "config_profile": "general",
+    "source_path": "Resource/law_documents/sample/01股权合同/2. 股权代持协议书.docx"
+  }
+]

@@ -19,6 +19,8 @@ def get_engine():
     connect_args: dict[str, object] = {}
     if settings.database_url.startswith("postgresql"):
         connect_args["connect_timeout"] = settings.database_connect_timeout_seconds
+    if settings.database_url.startswith("sqlite"):
+        connect_args["check_same_thread"] = False
     return create_engine(
         settings.database_url,
         future=True,
