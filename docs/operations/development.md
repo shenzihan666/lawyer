@@ -76,9 +76,9 @@ pnpm --dir frontend run build
 Repository hooks:
 
 ```bash
-./scripts/install-hooks.sh
-backend/.venv/bin/pre-commit run --all-files -c .pre-commit-config.yaml
-backend/.venv/bin/pre-commit run --hook-stage pre-push --all-files -c .pre-commit-config.yaml
+python scripts/install-hooks.py
+uv run --directory backend pre-commit run --all-files --config ../.pre-commit-config.yaml
+uv run --directory backend pre-commit run --hook-stage pre-push --all-files --config ../.pre-commit-config.yaml
 ```
 
 ## Local Defaults

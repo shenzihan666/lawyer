@@ -56,10 +56,10 @@ uv run --directory backend backend
 pnpm --dir frontend dev
 ```
 
-Install Git hooks with one command:
+Install project dependencies and Git hooks with one command:
 
 ```bash
-./scripts/install-hooks.sh
+python scripts/install-hooks.py
 ```
 
 ## Git Hooks
@@ -70,6 +70,8 @@ The repository uses `pre-commit` with three local hook stages:
   - generic file hygiene checks
   - `ruff format` and `ruff check --fix` for Python files
   - `prettier --write` for staged frontend files
+  - block staged frontend `console.log` and `debugger` statements
+  - run frontend type checking when staged `ts` or `vue` files change
 - `pre-push`: full project verification
   - backend tests with `pytest`
   - frontend type checking with `nuxi typecheck`
@@ -78,13 +80,15 @@ The repository uses `pre-commit` with three local hook stages:
   - format: `type(scope): description`
   - allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`, `ci`, `build`, `revert`
 
-Hooks are meant for local development and are not part of CI by default. If you need to bypass them for an exceptional case, use Git's `--no-verify` escape hatch.
+Hooks are meant for local development. `scripts/install-hooks.py` skips Git hook installation when `CI` is set, and the local hook wrappers also no-op in CI if they are invoked there. If you need to bypass hooks for an exceptional case, use Git's `--no-verify` escape hatch.
 
 ## Manual Commands
 
 Run the same checks manually without Git hooks:
 
 ```bash
+uv run --directory backend pre-commit run --all-files --config ../.pre-commit-config.yaml
+uv run --directory backend pre-commit run --hook-stage pre-push --all-files --config ../.pre-commit-config.yaml
 pnpm --dir frontend exec nuxi typecheck
 pnpm --dir frontend run build
 uv run --directory backend pytest
