@@ -49,6 +49,8 @@ src/app/
 
 - `DocumentAsset`: source file metadata and ingestion state
 - `DocumentFragment`: extracted raw document fragments
+- `OpponentAnalysisRun`: persisted multi-agent prediction run metadata
+- `OpponentAnalysisEvent`: structured per-step event log for replay and SSE
 
 ### `schemas/`
 
@@ -76,6 +78,14 @@ src/app/
 - Milvus collection lifecycle and hybrid search
 - PostgreSQL chunk store for parent-context recall
 - Redis-backed cache for search responses and chunk lookups
+
+### `services/opponent_analysis/`
+
+- fixed-phase workflow orchestration for courtroom rehearsal
+- shared context brief built from vector retrieval
+- multi-agent handoff between opponent party, opponent counsel, bench observer, and strategy advisor
+- structured event persistence for board playback
+- background execution plus SSE stream snapshots
 
 ## Storage Model
 

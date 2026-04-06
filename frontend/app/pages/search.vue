@@ -36,6 +36,55 @@ const topKOptions = [3, 5, 8, 10].map((value) => ({
   value,
 }));
 
+const expandedHitIds = ref<Set<number>>(new Set());
+const EXPANDED_HITS_STORAGE_KEY = "case-search-expanded-hits-v1";
+
+function loadExpandedHitMap() {
+  if (!import.meta.client) return {} as Record<string, number[]>;
+  try {
+    const raw = sessionStorage.getItem(EXPANDED_HITS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed).map(([key, value]) => [
+        key,
+        Array.isArray(value)
+          ? value.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
+          : [],
+      ]),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function saveExpandedHitMap(map: Record<string, number[]>) {
+  if (!import.meta.client) return;
+  sessionStorage.setItem(EXPANDED_HITS_STORAGE_KEY, JSON.stringify(map));
+}
+
+function restoreExpandedStateForCurrentSearch() {
+  const currentSearchId = detail.value?.item.id;
+  const currentHits = detail.value?.hits ?? [];
+  if (!currentSearchId || !currentHits.length) {
+    expandedHitIds.value = new Set();
+    return;
+  }
+
+  const hitIdSet = new Set(currentHits.map((item) => item.id));
+  const savedIds = (loadExpandedHitMap()[currentSearchId] ?? []).filter((id) => hitIdSet.has(id));
+  expandedHitIds.value = new Set(savedIds);
+}
+
+function persistExpandedStateForCurrentSearch(next: Set<number>) {
+  const currentSearchId = detail.value?.item.id;
+  if (!currentSearchId) return;
+
+  const map = loadExpandedHitMap();
+  map[currentSearchId] = [...next];
+  saveExpandedHitMap(map);
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "medium",
@@ -74,6 +123,25 @@ async function handleSelectHit(hitId: number) {
   });
 }
 
+function isHitExpanded(hitId: number) {
+  return expandedHitIds.value.has(hitId);
+}
+
+function toggleHitExpand(hitId: number) {
+  const next = new Set(expandedHitIds.value);
+  if (next.has(hitId)) {
+    next.delete(hitId);
+  } else {
+    next.add(hitId);
+  }
+  expandedHitIds.value = next;
+  persistExpandedStateForCurrentSearch(next);
+}
+
+watch(() => detail.value?.item.id, () => {
+  restoreExpandedStateForCurrentSearch();
+}, { immediate: true });
+
 onMounted(async () => {
   if (!documents.value.length) {
     await documentStore.refreshDocuments();
@@ -96,7 +164,7 @@ onMounted(async () => {
     </section>
 
     <div class="case-search-layout">
-      <aside class="case-panel case-panel--sidebar">
+      <aside class="case-panel case-panel--composer">
         <section class="case-block">
           <div class="case-block__header">
             <div>
@@ -181,7 +249,94 @@ onMounted(async () => {
             <UButton color="primary" :loading="isCreating" @click="caseSearchStore.createSearch()">开始检索</UButton>
           </div>
         </section>
+      </aside>
 
+      <main class="case-panel case-panel--results">
+        <section class="case-block case-block--results-head">
+          <div class="case-block__header">
+            <div>
+              <p class="case-block__eyebrow">Results</p>
+              <h2>{{ detail?.item.query_type === 'upload' ? '上传案件命中结果' : '文本案件命中结果' }}</h2>
+            </div>
+            <div class="result-head__meta">
+              <UBadge v-if="detail" color="primary" variant="subtle">{{ detail.item.result_count }} 条案件</UBadge>
+              <UBadge v-if="detail?.item.query_asset" color="neutral" variant="subtle">
+                {{ detail.item.query_asset.original_filename }}
+              </UBadge>
+            </div>
+          </div>
+          <p v-if="detail" class="result-head__query">{{ detail.item.prepared_query }}</p>
+          <div v-else class="empty-state empty-state--flat">
+            发起一次类案检索后，这里会展示案件级结果列表与命中摘要。
+          </div>
+        </section>
+
+        <section v-if="detail" class="result-stack">
+          <article
+            v-for="hit in detail.hits"
+            :key="hit.id"
+            class="result-card"
+          >
+            <div class="result-card__header">
+              <div>
+                <div class="result-card__topline">
+                  <span class="result-rank">#{{ hit.rank }}</span>
+                  <p class="result-title">{{ hit.original_filename }}</p>
+                </div>
+                <p class="result-subtitle">
+                  命中 {{ hit.matched_chunk_count }} 个片段
+                  <span v-if="hit.matched_pages.length"> · 页码 {{ hit.matched_pages.join(' / ') }}</span>
+                </p>
+              </div>
+              <div class="result-card__actions">
+                <div class="score-pill">{{ formatScore(hit.score) }}</div>
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  size="sm"
+                  :icon="isHitExpanded(hit.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                  @click="toggleHitExpand(hit.id)"
+                >
+                  {{ isHitExpanded(hit.id) ? '收起' : '展开' }}
+                </UButton>
+                <UButton
+                  color="primary"
+                  variant="soft"
+                  size="sm"
+                  icon="i-lucide-external-link"
+                  @click="handleSelectHit(hit.id)"
+                >
+                  查看预览
+                </UButton>
+              </div>
+            </div>
+
+            <div v-if="isHitExpanded(hit.id)" class="result-card__body">
+              <div class="snippet-list">
+                <p v-for="snippet in hit.matched_snippets" :key="snippet" class="snippet-pill">
+                  {{ snippet }}
+                </p>
+              </div>
+
+              <div class="top-chunk-list">
+                <div v-for="chunk in hit.top_chunks" :key="chunk.chunk_id" class="top-chunk-card">
+                  <div class="top-chunk-card__meta">
+                    <span>{{ chunk.page_number ? `第 ${chunk.page_number} 页` : '未分页' }}</span>
+                    <span>score {{ formatScore(chunk.score) }}</span>
+                  </div>
+                  <p>{{ chunk.content }}</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <div v-if="!detail.hits.length" class="empty-state">
+            本次没有找到相似案件。你可以尝试补充争议焦点、案由、责任认定或放宽知识库范围。
+          </div>
+        </section>
+      </main>
+
+      <aside class="case-panel case-panel--history">
         <section class="case-block case-block--history">
           <div class="case-block__header">
             <div>
@@ -228,70 +383,6 @@ onMounted(async () => {
           </div>
         </section>
       </aside>
-
-      <main class="case-panel case-panel--results">
-        <section class="case-block case-block--results-head">
-          <div class="case-block__header">
-            <div>
-              <p class="case-block__eyebrow">Results</p>
-              <h2>{{ detail?.item.query_type === 'upload' ? '上传案件命中结果' : '文本案件命中结果' }}</h2>
-            </div>
-            <div class="result-head__meta">
-              <UBadge v-if="detail" color="primary" variant="subtle">{{ detail.item.result_count }} 条案件</UBadge>
-              <UBadge v-if="detail?.item.query_asset" color="neutral" variant="subtle">
-                {{ detail.item.query_asset.original_filename }}
-              </UBadge>
-            </div>
-          </div>
-          <p v-if="detail" class="result-head__query">{{ detail.item.prepared_query }}</p>
-          <div v-else class="empty-state empty-state--flat">
-            发起一次类案检索后，这里会展示案件级结果列表与命中摘要。
-          </div>
-        </section>
-
-        <section v-if="detail" class="result-stack">
-          <article
-            v-for="hit in detail.hits"
-            :key="hit.id"
-            class="result-card"
-            @click="handleSelectHit(hit.id)"
-          >
-            <div class="result-card__header">
-              <div>
-                <div class="result-card__topline">
-                  <span class="result-rank">#{{ hit.rank }}</span>
-                  <p class="result-title">{{ hit.original_filename }}</p>
-                </div>
-                <p class="result-subtitle">
-                  命中 {{ hit.matched_chunk_count }} 个片段
-                  <span v-if="hit.matched_pages.length"> · 页码 {{ hit.matched_pages.join(' / ') }}</span>
-                </p>
-              </div>
-              <div class="score-pill">{{ formatScore(hit.score) }}</div>
-            </div>
-
-            <div class="snippet-list">
-              <p v-for="snippet in hit.matched_snippets" :key="snippet" class="snippet-pill">
-                {{ snippet }}
-              </p>
-            </div>
-
-            <div class="top-chunk-list">
-              <div v-for="chunk in hit.top_chunks" :key="chunk.chunk_id" class="top-chunk-card">
-                <div class="top-chunk-card__meta">
-                  <span>{{ chunk.page_number ? `第 ${chunk.page_number} 页` : '未分页' }}</span>
-                  <span>score {{ formatScore(chunk.score) }}</span>
-                </div>
-                <p>{{ chunk.content }}</p>
-              </div>
-            </div>
-          </article>
-
-          <div v-if="!detail.hits.length" class="empty-state">
-            本次没有找到相似案件。你可以尝试补充争议焦点、案由、责任认定或放宽知识库范围。
-          </div>
-        </section>
-      </main>
     </div>
   </div>
 </template>
@@ -389,7 +480,8 @@ onMounted(async () => {
   padding: 18px;
 }
 
-.case-panel--sidebar,
+.case-panel--composer,
+.case-panel--history,
 .case-panel--results {
   display: flex;
   flex-direction: column;
@@ -557,8 +649,18 @@ onMounted(async () => {
   background: linear-gradient(180deg, rgba(251, 252, 255, 0.96), rgba(255, 255, 255, 0.9));
 }
 
-.result-card {
-  cursor: pointer;
+.result-card__actions,
+.result-card__body {
+  display: grid;
+  gap: 10px;
+}
+
+.result-card__actions {
+  justify-items: end;
+}
+
+.result-card__body {
+  margin-top: 14px;
 }
 
 .result-card__topline {
@@ -629,11 +731,12 @@ onMounted(async () => {
   }
 
   .case-search-layout {
-    grid-template-columns: 320px minmax(0, 1fr);
+    grid-template-columns: 320px minmax(0, 1fr) 320px;
     align-items: start;
   }
 
-  .case-panel--sidebar,
+  .case-panel--composer,
+  .case-panel--history,
   .case-panel--results {
     position: sticky;
     top: 24px;
@@ -650,6 +753,15 @@ onMounted(async () => {
   .case-panel {
     border-radius: 26px;
     padding: 18px;
+  }
+
+  .result-card__header {
+    flex-direction: column;
+  }
+
+  .result-card__actions {
+    width: 100%;
+    justify-items: stretch;
   }
 }
 </style>

@@ -30,8 +30,12 @@ const templateForm = reactive({
 const tabs = [
   { key: "launch", label: "发起审查", icon: "i-lucide-rocket" },
   { key: "results", label: "审查结果", icon: "i-lucide-file-search" },
-  { key: "template-upload", label: "上传模板", icon: "i-lucide-library-big" },
-  { key: "template-list", label: "模板列表", icon: "i-lucide-list" },
+  {
+    key: "template-upload",
+    label: "上传审查清单",
+    icon: "i-lucide-library-big",
+  },
+  { key: "template-list", label: "审查清单列表", icon: "i-lucide-list" },
 ] as const;
 
 const selectedJob = computed(
@@ -162,8 +166,8 @@ onBeforeUnmount(() => {
       </div>
       <div class="stats hero-stats">
         <div class="stat">
-          <span>模板库</span>
-          <strong>{{ templates.length }} 个模板</strong>
+          <span>清单库</span>
+          <strong>{{ templates.length }} 个清单</strong>
         </div>
         <div class="stat">
           <span>任务数</span>
@@ -241,7 +245,7 @@ onBeforeUnmount(() => {
               />
             </div>
             <div class="field">
-              <label>模板选择</label>
+              <label>选择清单</label>
               <USelect
                 v-model="selectedTemplateId"
                 :items="
@@ -251,7 +255,7 @@ onBeforeUnmount(() => {
                   }))
                 "
                 value-key="value"
-                placeholder="请选择模板"
+                placeholder="请选择清单"
               />
             </div>
           </div>
@@ -261,7 +265,7 @@ onBeforeUnmount(() => {
               color="neutral"
               variant="ghost"
               @click="activeTab = 'template-upload'"
-              >管理模板</UButton
+              >管理清单</UButton
             >
             <UButton
               color="primary"
@@ -312,7 +316,7 @@ onBeforeUnmount(() => {
               <p class="title">{{ detail.job.review_name }}</p>
               <p class="subtle">
                 {{ detail.job.original_filename }} ·
-                {{ detail.template?.name || "未绑定模板" }}
+                {{ detail.template?.name || "未绑定清单" }}
               </p>
             </div>
             <UBadge
@@ -481,7 +485,7 @@ onBeforeUnmount(() => {
           <div class="card-head">
             <div>
               <p class="eyebrow">Library</p>
-              <h2>上传模板</h2>
+              <h2>上传审查清单</h2>
             </div>
           </div>
         </template>
@@ -499,8 +503,8 @@ onBeforeUnmount(() => {
               class="h-10 w-10 text-[#3158ff]"
             />
             <div>
-              <p class="title">上传模板文件</p>
-              <p class="subtle">仅需填写模板名称，可选补充模板说明。</p>
+              <p class="title">上传审查清单文件</p>
+              <p class="subtle">仅需填写清单名称，可选补充清单说明。</p>
             </div>
           </label>
 
@@ -520,20 +524,20 @@ onBeforeUnmount(() => {
 
           <div class="fields">
             <div class="field">
-              <label>模板名称</label>
+              <label>清单名称</label>
               <UInput
                 v-model="templateForm.name"
-                placeholder="请输入模板名称"
+                placeholder="请输入清单名称"
               />
             </div>
           </div>
 
           <div class="field">
-            <label>模板说明（可选）</label>
+            <label>清单说明（可选）</label>
             <UTextarea
               v-model="templateForm.description"
               :rows="4"
-              placeholder="可补充模板用途、适用场景等"
+              placeholder="可补充清单用途、适用场景等"
             />
           </div>
 
@@ -551,7 +555,7 @@ onBeforeUnmount(() => {
               :loading="isUploadingTemplate"
               @click="submitTemplate"
             >
-              上传模板
+              上传审查清单
             </UButton>
           </div>
         </div>
@@ -564,13 +568,13 @@ onBeforeUnmount(() => {
           <div class="card-head">
             <div>
               <p class="eyebrow">Catalog</p>
-              <h2>模板列表</h2>
+              <h2>审查清单列表</h2>
             </div>
           </div>
         </template>
 
         <div v-if="!templates.length" class="empty">
-          还没有模板，可以先上传团队模板。
+          还没有审查清单，可以先上传团队清单。
         </div>
         <div v-else class="stack">
           <article v-for="item in templates" :key="item.id" class="list-card">
@@ -587,7 +591,7 @@ onBeforeUnmount(() => {
                   variant="subtle"
                   size="xs"
                 >
-                  {{ item.source_type === "seed" ? "种子模板" : "手动上传" }}
+                  {{ item.source_type === "seed" ? "种子清单" : "手动上传" }}
                 </UBadge>
                 <UButton
                   icon="i-lucide-trash-2"
@@ -600,7 +604,7 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <p class="subtle">
-              {{ item.description || "当前模板已绑定默认审查配置。" }}
+              {{ item.description || "当前清单已绑定默认审查配置。" }}
             </p>
           </article>
         </div>

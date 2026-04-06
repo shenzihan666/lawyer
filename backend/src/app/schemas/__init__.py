@@ -25,3 +25,13 @@ from .search import (
     SearchResponse as SearchResponse,
     SearchResultItem as SearchResultItem,
 )
+from .opponent_analysis import (
+    OpponentAnalysisAgentPayload as OpponentAnalysisAgentPayload,
+    OpponentAnalysisCitation as OpponentAnalysisCitation,
+    OpponentAnalysisDetailResponse as OpponentAnalysisDetailResponse,
+    OpponentAnalysisEventItem as OpponentAnalysisEventItem,
+    OpponentAnalysisListResponse as OpponentAnalysisListResponse,
+    OpponentAnalysisRunCreateRequest as OpponentAnalysisRunCreateRequest,
+    OpponentAnalysisRunItem as OpponentAnalysisRunItem,
+    OpponentAnalysisSummary as OpponentAnalysisSummary,
+)

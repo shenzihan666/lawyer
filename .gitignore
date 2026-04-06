@@ -17,3 +17,5 @@ backend/.env
 backend/logs/
 backend/data/
 backend/uploads/
+
+Resource/law_documents/

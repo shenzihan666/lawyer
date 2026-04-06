@@ -14,9 +14,11 @@ Current UI is split into a light app shell plus page routes:
 - app shell: `frontend/app/app.vue`
 - redirect entrypoint: `frontend/app/pages/index.vue`
 - grounded chat workspace: `frontend/app/pages/chat.vue`
+- opponent prediction workbench: `frontend/app/pages/opponent-analysis.vue`
 - document workspace: `frontend/app/pages/documents.vue`
 - sidebar navigation: `frontend/app/components/AppSidebar.vue`
 - chat state store: `frontend/stores/chat.ts`
+- opponent analysis store: `frontend/stores/opponentAnalysis.ts`
 - document state store: `frontend/stores/documents.ts`
 - UI shell state store: `frontend/stores/ui.ts`
 - runtime config: `frontend/nuxt.config.ts`
@@ -24,6 +26,7 @@ Current UI is split into a light app shell plus page routes:
 ## Current Responsibilities
 
 - grounded single-turn legal Q&A with citation cards
+- multi-tab opponent prediction board with live process stream and replay
 - left navigation with desktop and mobile variants
 - drag-and-drop or picker-based file selection
 - single and batch upload

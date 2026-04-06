@@ -17,8 +17,13 @@ const {
 
 const apiOrigin = (useRuntimeConfig().public.apiBase as string).replace(/\/api\/v1$/, "");
 
-const selectedHitPages = computed(() => new Set(activeHit.value?.matched_pages ?? []));
-const selectedHitChunkIds = computed(() => new Set(activeHit.value?.matched_chunk_ids ?? []));
+const fullPreviewContent = computed(() =>
+  (preview.value?.fragments ?? [])
+    .map((fragment) => fragment.content?.trim())
+    .filter((content): content is string => Boolean(content))
+    .join("\n\n"),
+);
+const previewPdfUrl = computed(() => resolveApiUrl(preview.value?.preview_url) || resolveApiUrl(preview.value?.file_url));
 
 const searchId = computed(() => {
   const value = route.query.searchId;
@@ -120,6 +125,23 @@ watch([searchId, hitId], () => {
         </section>
 
         <section v-else-if="previewTab === 'structured'" class="preview-stack">
+          <div class="mode-switcher">
+            <button
+              type="button"
+              class="mode-switcher__item mode-switcher__item--active"
+              @click="previewTab = 'structured'"
+            >
+              全文
+            </button>
+            <button
+              type="button"
+              class="mode-switcher__item"
+              @click="previewTab = 'original'"
+            >
+              原 PDF
+            </button>
+          </div>
+
           <div class="preview-summary-card">
             <div class="preview-summary-card__meta">
               <span>{{ preview.original_filename }}</span>
@@ -132,24 +154,33 @@ watch([searchId, hitId], () => {
             <span v-for="page in activeHit.matched_pages" :key="page" class="match-chip">第 {{ page }} 页</span>
           </div>
 
-          <article
-            v-for="fragment in preview.fragments"
-            :key="`${fragment.fragment_index}-${fragment.page_number}`"
-            class="fragment-card"
-            :class="{
-              'fragment-card--matched': selectedHitPages.has(fragment.page_number),
-              'fragment-card--focused': fragment.metadata?.chunk_id && selectedHitChunkIds.has(String(fragment.metadata.chunk_id)),
-            }"
-          >
-            <div class="fragment-card__meta">
-              <span>片段 {{ fragment.fragment_index + 1 }}</span>
-              <span>{{ fragment.page_number ? `第 ${fragment.page_number} 页` : '未分页' }}</span>
-            </div>
-            <p>{{ fragment.content }}</p>
+          <article class="full-content-card">
+            <h3>案件全文</h3>
+            <p v-if="fullPreviewContent" class="full-content-card__body">{{ fullPreviewContent }}</p>
+            <p v-else class="full-content-card__placeholder">
+              当前案件暂无可用的结构化正文，请切换到“原 PDF”查看原始文档。
+            </p>
           </article>
         </section>
 
         <section v-else class="original-preview-shell">
+          <div class="mode-switcher">
+            <button
+              type="button"
+              class="mode-switcher__item"
+              @click="previewTab = 'structured'"
+            >
+              全文
+            </button>
+            <button
+              type="button"
+              class="mode-switcher__item mode-switcher__item--active"
+              @click="previewTab = 'original'"
+            >
+              原 PDF
+            </button>
+          </div>
+
           <div class="original-preview-card">
             <p class="original-preview-card__copy">
               当前预览状态：{{ preview.preview_status }}
@@ -178,10 +209,10 @@ watch([searchId, hitId], () => {
           </div>
 
           <iframe
-            v-if="resolveApiUrl(preview.preview_url)"
-            class="original-preview-frame"
-            :src="resolveApiUrl(preview.preview_url) || undefined"
-            title="案件原文件预览"
+            v-if="previewPdfUrl"
+            class="original-preview-pdf"
+            :src="previewPdfUrl"
+            title="案件原始 PDF 预览"
           />
           <div v-else class="empty-state empty-state--flat">
             当前文件预览尚不可用。系统会优先展示结构化正文，你仍然可以下载原文件查看。
@@ -206,10 +237,12 @@ watch([searchId, hitId], () => {
 
 .case-search-hero,
 .case-panel,
+.mode-switcher,
 .preview-summary-card,
 .fragment-card,
 .top-chunk-card,
-.original-preview-card {
+.original-preview-card,
+.full-content-card {
   border: 1px solid #e9e0d0;
   box-shadow: 0 20px 48px rgba(34, 24, 12, 0.06);
 }
@@ -318,10 +351,37 @@ watch([searchId, hitId], () => {
   gap: 12px;
 }
 
+.mode-switcher {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border-radius: 22px;
+  padding: 8px;
+  background: rgba(247, 243, 236, 0.96);
+}
+
+.mode-switcher__item {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: transparent;
+  padding: 12px 14px;
+  font-weight: 600;
+  color: #665f56;
+  transition: 0.18s ease;
+}
+
+.mode-switcher__item--active {
+  border-color: #3158ff;
+  background: rgba(243, 247, 255, 0.92);
+  color: #3158ff;
+}
+
 .preview-summary-card,
 .fragment-card,
 .top-chunk-card,
 .original-preview-card,
+.full-content-card,
 .empty-state {
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.88);
@@ -330,8 +390,31 @@ watch([searchId, hitId], () => {
 .preview-summary-card,
 .fragment-card,
 .top-chunk-card,
-.original-preview-card {
+.original-preview-card,
+.full-content-card {
   padding: 14px 16px;
+}
+
+.full-content-card {
+  display: grid;
+  gap: 10px;
+}
+
+.full-content-card h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #18181b;
+}
+
+.full-content-card__body {
+  white-space: pre-wrap;
+  line-height: 1.8;
+  color: #2f2d2a;
+}
+
+.full-content-card__placeholder {
+  color: #7d7569;
+  line-height: 1.75;
 }
 
 .preview-summary-card__meta,
@@ -385,12 +468,15 @@ watch([searchId, hitId], () => {
   min-height: 0;
 }
 
-.original-preview-frame {
+.original-preview-pdf {
   width: 100%;
-  min-height: 720px;
+  min-height: 680px;
+  max-height: 75vh;
+  overflow: hidden;
+  padding: 0;
   border: 1px solid #e9e0d0;
   border-radius: 24px;
-  background: white;
+  background: #fff;
 }
 
 .empty-state {

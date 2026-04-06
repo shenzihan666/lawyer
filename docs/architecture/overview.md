@@ -33,6 +33,7 @@ Implemented now:
 - Milvus-based hybrid retrieval with Redis cache support
 - post-retrieval rerank with dedicated endpoint or chat-model fallback
 - single-turn grounded answer generation with inline citations
+- persisted multi-agent opponent prediction runs with event replay and SSE updates
 
 ## System Flow
 
@@ -47,6 +48,7 @@ Frontend upload UI
     -> leaf chunks embedded through external API and written to Milvus
     -> search retrieves grounded evidence
     -> chat answer endpoint generates cited answer from retrieved chunks
+    -> opponent analysis orchestrator builds shared context, agent handoff events, and board summary
     -> document status and answer payload returned to frontend
 ```
 

@@ -11,6 +11,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
         "DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'lawyer-test.db'}"
     )
     monkeypatch.setenv("UPLOAD_ROOT_PATH", str(tmp_path / "uploads"))
+    monkeypatch.setenv("LOG_ROOT_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("AGENT_ENABLED", "false")
 
     from app.core.config import get_settings
     from app.db.session import get_engine, get_session_factory

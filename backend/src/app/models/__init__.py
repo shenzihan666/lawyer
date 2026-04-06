@@ -21,3 +21,9 @@ from .document import (
     DocumentIngestionStatus as DocumentIngestionStatus,
     DocumentVectorStatus as DocumentVectorStatus,
 )
+from .opponent_analysis import (
+    OpponentAnalysisEvent as OpponentAnalysisEvent,
+    OpponentAnalysisEventType as OpponentAnalysisEventType,
+    OpponentAnalysisRun as OpponentAnalysisRun,
+    OpponentAnalysisStatus as OpponentAnalysisStatus,
+)

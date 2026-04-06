@@ -169,7 +169,7 @@ export const useContractReviewStore = defineStore("contractReview", () => {
       templates.value = payload.items;
     } catch (error) {
       toast.add({
-        title: "模板加载失败",
+        title: "审查清单加载失败",
         description: String(error),
         color: "error",
       });
@@ -309,13 +309,13 @@ export const useContractReviewStore = defineStore("contractReview", () => {
       );
       templates.value = response.items;
       toast.add({
-        title: "模板已入库",
-        description: "模板已经加入工作台模板库。",
+        title: "审查清单已入库",
+        description: "审查清单已经加入工作台清单库。",
         color: "success",
       });
     } catch (error) {
       toast.add({
-        title: "模板上传失败",
+        title: "审查清单上传失败",
         description: String(error),
         color: "error",
       });
@@ -336,13 +336,13 @@ export const useContractReviewStore = defineStore("contractReview", () => {
       );
       templates.value = response.items;
       toast.add({
-        title: "模板已删除",
-        description: "模板已从工作台模板库移除。",
+        title: "审查清单已删除",
+        description: "审查清单已从工作台清单库移除。",
         color: "success",
       });
     } catch (error) {
       toast.add({
-        title: "模板删除失败",
+        title: "审查清单删除失败",
         description: String(error),
         color: "error",
       });

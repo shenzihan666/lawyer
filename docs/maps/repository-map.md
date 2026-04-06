@@ -46,6 +46,7 @@ backend/
 
 - `src/app/main.py`: app bootstrap, CORS, router mounting, DB initialization
 - `src/app/api/routes/chat.py`: grounded answer generation API
+- `src/app/api/routes/opponent_analyses.py`: persisted multi-agent opponent prediction API and SSE stream
 - `src/app/api/routes/documents.py`: upload, list, delete, vectorize APIs
 - `src/app/core/config.py`: environment-driven settings
 - `src/app/db/`: engine, session, and declarative base
@@ -53,6 +54,7 @@ backend/
 - `src/app/schemas/document.py`: request/response contracts
 - `src/app/schemas/answer.py`: chat answer request/response contracts
 - `src/app/services/answers/`: answer generation and citation assembly
+- `src/app/services/opponent_analysis/`: multi-agent workflow orchestration, event persistence, and background execution
 - `src/app/services/documents/`: document orchestration and upload storage
 - `src/app/services/loaders/`: file-type-specific loader registry and normalization rules
 - `src/app/services/vectors/`: chunking, embeddings, Milvus indexing, and retrieval
@@ -75,7 +77,9 @@ frontend/
 - `app/app.vue`: global shell, mobile top bar, and sidebar layout
 - `app/pages/index.vue`: redirect entrypoint to the chat workspace
 - `app/pages/chat.vue`: grounded Q&A page with citations
+- `app/pages/opponent-analysis.vue`: opponent prediction workbench with overview, process, speech, and evidence tabs
 - `app/pages/documents.vue`: document upload and management page
+- `stores/opponentAnalysis.ts`: run history, detail loading, SSE stream, and replay state
 - `stores/chat.ts`: answer request state and citation payload handling
 - `app/components/AppSidebar.vue`: left navigation sidebar
 - `nuxt.config.ts`: runtime config, including public API base
@@ -95,6 +99,12 @@ frontend/
 - Change answer generation or citation behavior:
   - `backend/src/app/services/answers/`
   - `backend/src/app/api/routes/chat.py`
+- Change opponent prediction workflow or event structure:
+  - `backend/src/app/services/opponent_analysis/`
+  - `backend/src/app/api/routes/opponent_analyses.py`
+- Change opponent prediction board UI:
+  - `frontend/app/pages/opponent-analysis.vue`
+  - `frontend/stores/opponentAnalysis.ts`
 - Change metadata schema:
   - `backend/src/app/models/document.py`
   - `backend/src/app/schemas/document.py`

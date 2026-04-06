@@ -55,6 +55,12 @@ Backend tests:
 uv run --directory backend pytest
 ```
 
+Targeted opponent analysis tests:
+
+```bash
+uv run --directory backend pytest tests/test_opponent_analysis_api.py
+```
+
 Frontend typecheck:
 
 ```bash
