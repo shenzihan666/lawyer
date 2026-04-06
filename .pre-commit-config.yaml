@@ -1,3 +1,5 @@
+minimum_pre_commit_version: "4.2.0"
+
 default_install_hook_types:
   - pre-commit
   - pre-push
@@ -5,6 +7,14 @@ default_install_hook_types:
 
 default_stages:
   - pre-commit
+
+exclude: |
+  (?x)^(
+    backend/(?:\.venv|\.pytest_cache|\.ruff_cache|data|logs|uploads)/|
+    frontend/(?:\.nuxt|\.output|node_modules)/|
+    \.playwright-mcp/|
+    volumes/
+  )
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -24,49 +34,65 @@ repos:
     hooks:
       - id: backend-ruff-format
         name: backend ruff format
-        entry: python3 scripts/run_backend_ruff.py format
-        language: system
+        entry: python scripts/run_hook_command.py backend-ruff-format python scripts/run_backend_ruff.py format
+        language: python
         files: ^backend/.*\.py$
 
       - id: backend-ruff-check
         name: backend ruff check
-        entry: python3 scripts/run_backend_ruff.py check --fix --force-exclude
-        language: system
+        entry: python scripts/run_hook_command.py backend-ruff-check python scripts/run_backend_ruff.py check --fix --force-exclude
+        language: python
         files: ^backend/.*\.py$
 
       - id: frontend-prettier
         name: frontend prettier
-        entry: python3 scripts/run_frontend_prettier.py
-        language: system
+        entry: python scripts/run_hook_command.py frontend-prettier python scripts/run_frontend_prettier.py
+        language: python
         files: ^frontend/.*\.(css|html|js|json|md|mjs|ts|vue|ya?ml)$
 
-      - id: backend-tests
-        name: backend tests
-        entry: uv run --directory backend pytest
-        language: system
-        pass_filenames: false
-        stages:
-          - pre-push
+      - id: frontend-no-debug-statements
+        name: frontend no debug statements
+        entry: python scripts/run_hook_command.py frontend-no-debug-statements python scripts/check_frontend_debug_statements.py
+        language: python
+        files: ^frontend/.*\.(js|mjs|ts|vue)$
 
       - id: frontend-typecheck
         name: frontend typecheck
-        entry: pnpm --dir frontend exec nuxi typecheck
-        language: system
+        entry: python scripts/run_hook_command.py frontend-typecheck pnpm --dir frontend exec nuxi typecheck
+        language: python
+        files: ^frontend/.*\.(ts|vue)$
         pass_filenames: false
+
+      - id: backend-tests
+        name: backend tests
+        entry: python scripts/run_hook_command.py backend-tests uv run --directory backend pytest
+        language: python
+        pass_filenames: false
+        always_run: true
+        stages:
+          - pre-push
+
+      - id: frontend-typecheck-push
+        name: frontend typecheck
+        entry: python scripts/run_hook_command.py frontend-typecheck-push pnpm --dir frontend exec nuxi typecheck
+        language: python
+        pass_filenames: false
+        always_run: true
         stages:
           - pre-push
 
       - id: frontend-build
         name: frontend build
-        entry: pnpm --dir frontend run build
-        language: system
+        entry: python scripts/run_hook_command.py frontend-build pnpm --dir frontend run build
+        language: python
         pass_filenames: false
+        always_run: true
         stages:
           - pre-push
 
       - id: commit-msg
         name: conventional commit message
-        entry: python3 scripts/validate_commit_msg.py
-        language: system
+        entry: python scripts/run_hook_command.py commit-msg python scripts/validate_commit_msg.py
+        language: python
         stages:
           - commit-msg
