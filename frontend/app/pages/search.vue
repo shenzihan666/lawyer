@@ -49,7 +49,10 @@ function loadExpandedHitMap() {
       Object.entries(parsed).map(([key, value]) => [
         key,
         Array.isArray(value)
-          ? value.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
+          ? value.filter(
+              (item): item is number =>
+                typeof item === "number" && Number.isFinite(item),
+            )
           : [],
       ]),
     );
@@ -72,7 +75,9 @@ function restoreExpandedStateForCurrentSearch() {
   }
 
   const hitIdSet = new Set(currentHits.map((item) => item.id));
-  const savedIds = (loadExpandedHitMap()[currentSearchId] ?? []).filter((id) => hitIdSet.has(id));
+  const savedIds = (loadExpandedHitMap()[currentSearchId] ?? []).filter((id) =>
+    hitIdSet.has(id),
+  );
   expandedHitIds.value = new Set(savedIds);
 }
 
@@ -138,9 +143,13 @@ function toggleHitExpand(hitId: number) {
   persistExpandedStateForCurrentSearch(next);
 }
 
-watch(() => detail.value?.item.id, () => {
-  restoreExpandedStateForCurrentSearch();
-}, { immediate: true });
+watch(
+  () => detail.value?.item.id,
+  () => {
+    restoreExpandedStateForCurrentSearch();
+  },
+  { immediate: true },
+);
 
 onMounted(async () => {
   if (!documents.value.length) {
@@ -207,7 +216,12 @@ onMounted(async () => {
 
           <div v-else class="field-stack">
             <label class="upload-dropzone">
-              <input type="file" class="hidden" accept=".pdf,.docx,.xls,.xlsx" @change="onFileChange" />
+              <input
+                type="file"
+                class="hidden"
+                accept=".pdf,.docx,.xls,.xlsx"
+                @change="onFileChange"
+              />
               <UIcon name="i-lucide-file-up" class="h-8 w-8 text-[#3158ff]" />
               <div>
                 <p class="upload-dropzone__title">上传待比对案件</p>
@@ -218,15 +232,28 @@ onMounted(async () => {
             <div v-if="pendingFile" class="pending-file-card">
               <div>
                 <p class="pending-file-card__title">{{ pendingFile.name }}</p>
-                <p class="pending-file-card__meta">{{ formatFileSize(pendingFile.size) }}</p>
+                <p class="pending-file-card__meta">
+                  {{ formatFileSize(pendingFile.size) }}
+                </p>
               </div>
-              <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="xs" @click="caseSearchStore.setPendingFile(null)" />
+              <UButton
+                icon="i-lucide-x"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                @click="caseSearchStore.setPendingFile(null)"
+              />
             </div>
           </div>
 
           <div class="field-stack">
             <label class="field-label">返回数量</label>
-            <USelect v-model="topK" :items="topKOptions" value-key="value" class="w-full" />
+            <USelect
+              v-model="topK"
+              :items="topKOptions"
+              value-key="value"
+              class="w-full"
+            />
           </div>
 
           <div class="field-stack">
@@ -245,8 +272,18 @@ onMounted(async () => {
           </div>
 
           <div class="case-actions">
-            <UButton color="neutral" variant="ghost" @click="caseSearchStore.resetComposer()">清空</UButton>
-            <UButton color="primary" :loading="isCreating" @click="caseSearchStore.createSearch()">开始检索</UButton>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              @click="caseSearchStore.resetComposer()"
+              >清空</UButton
+            >
+            <UButton
+              color="primary"
+              :loading="isCreating"
+              @click="caseSearchStore.createSearch()"
+              >开始检索</UButton
+            >
           </div>
         </section>
       </aside>
@@ -256,27 +293,37 @@ onMounted(async () => {
           <div class="case-block__header">
             <div>
               <p class="case-block__eyebrow">Results</p>
-              <h2>{{ detail?.item.query_type === 'upload' ? '上传案件命中结果' : '文本案件命中结果' }}</h2>
+              <h2>
+                {{
+                  detail?.item.query_type === "upload"
+                    ? "上传案件命中结果"
+                    : "文本案件命中结果"
+                }}
+              </h2>
             </div>
             <div class="result-head__meta">
-              <UBadge v-if="detail" color="primary" variant="subtle">{{ detail.item.result_count }} 条案件</UBadge>
-              <UBadge v-if="detail?.item.query_asset" color="neutral" variant="subtle">
+              <UBadge v-if="detail" color="primary" variant="subtle"
+                >{{ detail.item.result_count }} 条案件</UBadge
+              >
+              <UBadge
+                v-if="detail?.item.query_asset"
+                color="neutral"
+                variant="subtle"
+              >
                 {{ detail.item.query_asset.original_filename }}
               </UBadge>
             </div>
           </div>
-          <p v-if="detail" class="result-head__query">{{ detail.item.prepared_query }}</p>
+          <p v-if="detail" class="result-head__query">
+            {{ detail.item.prepared_query }}
+          </p>
           <div v-else class="empty-state empty-state--flat">
             发起一次类案检索后，这里会展示案件级结果列表与命中摘要。
           </div>
         </section>
 
         <section v-if="detail" class="result-stack">
-          <article
-            v-for="hit in detail.hits"
-            :key="hit.id"
-            class="result-card"
-          >
+          <article v-for="hit in detail.hits" :key="hit.id" class="result-card">
             <div class="result-card__header">
               <div>
                 <div class="result-card__topline">
@@ -285,7 +332,9 @@ onMounted(async () => {
                 </div>
                 <p class="result-subtitle">
                   命中 {{ hit.matched_chunk_count }} 个片段
-                  <span v-if="hit.matched_pages.length"> · 页码 {{ hit.matched_pages.join(' / ') }}</span>
+                  <span v-if="hit.matched_pages.length">
+                    · 页码 {{ hit.matched_pages.join(" / ") }}</span
+                  >
                 </p>
               </div>
               <div class="result-card__actions">
@@ -294,10 +343,14 @@ onMounted(async () => {
                   color="neutral"
                   variant="soft"
                   size="sm"
-                  :icon="isHitExpanded(hit.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                  :icon="
+                    isHitExpanded(hit.id)
+                      ? 'i-lucide-chevron-up'
+                      : 'i-lucide-chevron-down'
+                  "
                   @click="toggleHitExpand(hit.id)"
                 >
-                  {{ isHitExpanded(hit.id) ? '收起' : '展开' }}
+                  {{ isHitExpanded(hit.id) ? "收起" : "展开" }}
                 </UButton>
                 <UButton
                   color="primary"
@@ -313,15 +366,27 @@ onMounted(async () => {
 
             <div v-if="isHitExpanded(hit.id)" class="result-card__body">
               <div class="snippet-list">
-                <p v-for="snippet in hit.matched_snippets" :key="snippet" class="snippet-pill">
+                <p
+                  v-for="snippet in hit.matched_snippets"
+                  :key="snippet"
+                  class="snippet-pill"
+                >
                   {{ snippet }}
                 </p>
               </div>
 
               <div class="top-chunk-list">
-                <div v-for="chunk in hit.top_chunks" :key="chunk.chunk_id" class="top-chunk-card">
+                <div
+                  v-for="chunk in hit.top_chunks"
+                  :key="chunk.chunk_id"
+                  class="top-chunk-card"
+                >
                   <div class="top-chunk-card__meta">
-                    <span>{{ chunk.page_number ? `第 ${chunk.page_number} 页` : '未分页' }}</span>
+                    <span>{{
+                      chunk.page_number
+                        ? `第 ${chunk.page_number} 页`
+                        : "未分页"
+                    }}</span>
                     <span>score {{ formatScore(chunk.score) }}</span>
                   </div>
                   <p>{{ chunk.content }}</p>
@@ -368,9 +433,15 @@ onMounted(async () => {
               <div class="history-card__header">
                 <div>
                   <p class="history-card__title">
-                    {{ item.query_type === 'upload' ? item.query_asset?.original_filename || '上传案件' : item.query_text || '文本检索' }}
+                    {{
+                      item.query_type === "upload"
+                        ? item.query_asset?.original_filename || "上传案件"
+                        : item.query_text || "文本检索"
+                    }}
                   </p>
-                  <p class="history-card__meta">{{ formatDate(item.created_at) }}</p>
+                  <p class="history-card__meta">
+                    {{ formatDate(item.created_at) }}
+                  </p>
                 </div>
                 <UBadge color="neutral" variant="subtle" size="xs">
                   {{ item.result_count }} 条
@@ -391,8 +462,16 @@ onMounted(async () => {
 .case-search-page {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(222, 231, 255, 0.78), transparent 22%),
-    radial-gradient(circle at bottom right, rgba(247, 229, 201, 0.72), transparent 28%),
+    radial-gradient(
+      circle at top left,
+      rgba(222, 231, 255, 0.78),
+      transparent 22%
+    ),
+    radial-gradient(
+      circle at bottom right,
+      rgba(247, 229, 201, 0.72),
+      transparent 28%
+    ),
     linear-gradient(180deg, #f6f2ea, #fbfaf6);
   display: flex;
   flex-direction: column;
@@ -425,7 +504,11 @@ onMounted(async () => {
   gap: 18px;
   padding: 26px 28px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(250, 245, 235, 0.92)),
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.95),
+      rgba(250, 245, 235, 0.92)
+    ),
     repeating-linear-gradient(
       -18deg,
       rgba(49, 88, 255, 0.03),
@@ -646,7 +729,11 @@ onMounted(async () => {
 .result-card--active,
 .fragment-card--matched {
   border-color: #bfd0ff;
-  background: linear-gradient(180deg, rgba(251, 252, 255, 0.96), rgba(255, 255, 255, 0.9));
+  background: linear-gradient(
+    180deg,
+    rgba(251, 252, 255, 0.96),
+    rgba(255, 255, 255, 0.9)
+  );
 }
 
 .result-card__actions,
@@ -694,7 +781,9 @@ onMounted(async () => {
   background: #18181b;
   color: #fff;
   padding: 8px 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
   font-size: 0.82rem;
 }
 

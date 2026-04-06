@@ -20,7 +20,8 @@ export const useConversationsStore = defineStore("conversations", () => {
   function sortConversations(items: Conversation[]) {
     return [...items].sort(
       (left, right) =>
-        new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
+        new Date(right.updated_at).getTime() -
+        new Date(left.updated_at).getTime(),
     );
   }
 
@@ -30,7 +31,10 @@ export const useConversationsStore = defineStore("conversations", () => {
     );
 
     if (index === -1) {
-      conversations.value = sortConversations([conversation, ...conversations.value]);
+      conversations.value = sortConversations([
+        conversation,
+        ...conversations.value,
+      ]);
       return;
     }
 

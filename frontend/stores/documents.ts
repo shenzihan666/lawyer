@@ -198,7 +198,10 @@ export const useDocumentStore = defineStore("documents", () => {
     vectorizationProgress.percent =
       completed >= vectorizationProgress.total
         ? 100
-        : Math.min(99, Math.max(8, Math.round((weightedCompleted / total) * 100)));
+        : Math.min(
+            99,
+            Math.max(8, Math.round((weightedCompleted / total) * 100)),
+          );
 
     if (completed >= vectorizationProgress.total) {
       vectorizationProgress.label =

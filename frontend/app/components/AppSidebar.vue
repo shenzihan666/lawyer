@@ -16,8 +16,16 @@ const renameDraft = ref("");
 const navItems = [
   { label: "知识库", path: "/documents", icon: "i-lucide-book-open" },
   { label: "类案检索", path: "/search", icon: "i-lucide-search" },
-  { label: "合同审查", path: "/contract-review", icon: "i-lucide-file-signature" },
-  { label: "对方观点预判", path: "/opponent-analysis", icon: "i-lucide-shield-question" },
+  {
+    label: "合同审查",
+    path: "/contract-review",
+    icon: "i-lucide-file-signature",
+  },
+  {
+    label: "对方观点预判",
+    path: "/opponent-analysis",
+    icon: "i-lucide-shield-question",
+  },
 ];
 
 const shellClass = computed(() => [
@@ -193,7 +201,10 @@ watch(
           会话记录
         </div>
 
-        <div v-if="conversations.length === 0" class="px-1 py-4 text-center text-xs text-zinc-400">
+        <div
+          v-if="conversations.length === 0"
+          class="px-1 py-4 text-center text-xs text-zinc-400"
+        >
           暂无会话记录
         </div>
 
@@ -242,8 +253,13 @@ watch(
                 {{ item.title }}
               </div>
               <div class="mt-0.5 text-[11px] text-zinc-400">
-                <span v-if="isConversationBusy(item.thread_id)" class="inline-flex items-center gap-1 text-[#3158ff]">
-                  <span class="h-1.5 w-1.5 rounded-full bg-[#3158ff] animate-pulse" />
+                <span
+                  v-if="isConversationBusy(item.thread_id)"
+                  class="inline-flex items-center gap-1 text-[#3158ff]"
+                >
+                  <span
+                    class="h-1.5 w-1.5 rounded-full bg-[#3158ff] animate-pulse"
+                  />
                   回复中
                 </span>
                 <span v-else>
@@ -255,7 +271,9 @@ watch(
             <!-- Actions (visible on hover) -->
             <div
               class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5"
-              :class="isEditingConversation(item.thread_id) ? 'opacity-100' : ''"
+              :class="
+                isEditingConversation(item.thread_id) ? 'opacity-100' : ''
+              "
             >
               <UButton
                 v-if="!isEditingConversation(item.thread_id)"

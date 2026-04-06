@@ -99,22 +99,32 @@ export const useCaseSearchStore = defineStore("case-search", () => {
   const isLoadingDetail = ref(false);
   const isLoadingPreview = ref(false);
 
-  const activeHit = computed(() =>
-    detail.value?.hits.find((item) => item.id === activeHitId.value) ?? null,
+  const activeHit = computed(
+    () =>
+      detail.value?.hits.find((item) => item.id === activeHitId.value) ?? null,
   );
 
-  async function request<T>(path: string, options?: Parameters<typeof $fetch<T>>[1]) {
+  async function request<T>(
+    path: string,
+    options?: Parameters<typeof $fetch<T>>[1],
+  ) {
     return await $fetch<T>(`${apiBase}${path}`, options);
   }
 
   async function fetchHistory() {
     isLoadingHistory.value = true;
     try {
-      const payload = await request<{ items: CaseSearchListItem[] }>("/case-searches");
+      const payload = await request<{ items: CaseSearchListItem[] }>(
+        "/case-searches",
+      );
       searches.value = payload.items;
       return payload.items;
     } catch (error) {
-      toast.add({ title: "历史加载失败", description: String(error), color: "error" });
+      toast.add({
+        title: "历史加载失败",
+        description: String(error),
+        color: "error",
+      });
       return [];
     } finally {
       isLoadingHistory.value = false;
@@ -126,10 +136,14 @@ export const useCaseSearchStore = defineStore("case-search", () => {
       isLoadingDetail.value = true;
     }
     try {
-      const payload = await request<CaseSearchDetail>(`/case-searches/${searchId}`);
+      const payload = await request<CaseSearchDetail>(
+        `/case-searches/${searchId}`,
+      );
       detail.value = payload;
       activeSearchId.value = payload.item.id;
-      const existing = searches.value.findIndex((item) => item.id === payload.item.id);
+      const existing = searches.value.findIndex(
+        (item) => item.id === payload.item.id,
+      );
       if (existing === -1) {
         searches.value = [payload.item, ...searches.value];
       } else {
@@ -142,7 +156,11 @@ export const useCaseSearchStore = defineStore("case-search", () => {
       return payload;
     } catch (error) {
       if (!options?.quiet) {
-        toast.add({ title: "结果加载失败", description: String(error), color: "error" });
+        toast.add({
+          title: "结果加载失败",
+          description: String(error),
+          color: "error",
+        });
       }
       throw error;
     } finally {
@@ -154,11 +172,19 @@ export const useCaseSearchStore = defineStore("case-search", () => {
 
   async function createSearch() {
     if (mode.value === "text" && !queryText.value.trim()) {
-      toast.add({ title: "请输入案件描述", description: "至少输入一段案情或争议焦点。", color: "warning" });
+      toast.add({
+        title: "请输入案件描述",
+        description: "至少输入一段案情或争议焦点。",
+        color: "warning",
+      });
       return;
     }
     if (mode.value === "upload" && !pendingFile.value) {
-      toast.add({ title: "请上传待比对案件", description: "上传文件后再发起类案检索。", color: "warning" });
+      toast.add({
+        title: "请上传待比对案件",
+        description: "上传文件后再发起类案检索。",
+        color: "warning",
+      });
       return;
     }
 
@@ -181,7 +207,10 @@ export const useCaseSearchStore = defineStore("case-search", () => {
       });
       detail.value = payload;
       activeSearchId.value = payload.item.id;
-      searches.value = [payload.item, ...searches.value.filter((item) => item.id !== payload.item.id)];
+      searches.value = [
+        payload.item,
+        ...searches.value.filter((item) => item.id !== payload.item.id),
+      ];
       preview.value = null;
       activeHitId.value = null;
       if (mode.value === "upload") {
@@ -195,7 +224,11 @@ export const useCaseSearchStore = defineStore("case-search", () => {
         color: "success",
       });
     } catch (error) {
-      toast.add({ title: "类案检索失败", description: String(error), color: "error" });
+      toast.add({
+        title: "类案检索失败",
+        description: String(error),
+        color: "error",
+      });
     } finally {
       isCreating.value = false;
     }
@@ -221,10 +254,16 @@ export const useCaseSearchStore = defineStore("case-search", () => {
       isLoadingPreview.value = true;
     }
     try {
-      const payload = await request<DocumentPreview>(`/documents/${hit.document_id}/preview`);
+      const payload = await request<DocumentPreview>(
+        `/documents/${hit.document_id}/preview`,
+      );
       preview.value = payload;
     } catch (error) {
-      toast.add({ title: "预览加载失败", description: String(error), color: "error" });
+      toast.add({
+        title: "预览加载失败",
+        description: String(error),
+        color: "error",
+      });
     } finally {
       if (!options?.quiet) {
         isLoadingPreview.value = false;
@@ -242,9 +281,17 @@ export const useCaseSearchStore = defineStore("case-search", () => {
         activeSearchId.value = null;
         activeHitId.value = null;
       }
-      toast.add({ title: "历史已删除", description: "该次类案检索记录已移除。", color: "success" });
+      toast.add({
+        title: "历史已删除",
+        description: "该次类案检索记录已移除。",
+        color: "success",
+      });
     } catch (error) {
-      toast.add({ title: "删除失败", description: String(error), color: "error" });
+      toast.add({
+        title: "删除失败",
+        description: String(error),
+        color: "error",
+      });
     }
   }
 

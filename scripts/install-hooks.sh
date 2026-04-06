@@ -1,6 +1,13 @@
 #!/usr/bin/env sh
 set -eu
 
-uv sync --directory backend --group dev
-pnpm install --dir frontend
-uv run --directory backend pre-commit install --config ../.pre-commit-config.yaml --install-hooks --hook-type pre-commit --hook-type pre-push --hook-type commit-msg
+if command -v python3 >/dev/null 2>&1; then
+  PYTHON_CMD=python3
+elif command -v python >/dev/null 2>&1; then
+  PYTHON_CMD=python
+else
+  echo "Python 3 is required to install hooks." >&2
+  exit 1
+fi
+
+exec "$PYTHON_CMD" scripts/install-hooks.py

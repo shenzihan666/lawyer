@@ -96,7 +96,9 @@ function createDraftSessionKey() {
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function createConversationState(threadId: string | null): ConversationRuntimeState {
+function createConversationState(
+  threadId: string | null,
+): ConversationRuntimeState {
   return {
     threadId,
     messages: [],
@@ -120,7 +122,10 @@ export const useChatStore = defineStore("chat", () => {
   const activeSessionKey = ref(createDraftSessionKey());
   sessionStates.value[activeSessionKey.value] = createConversationState(null);
 
-  function ensureSessionState(sessionKey: string, threadId: string | null = null) {
+  function ensureSessionState(
+    sessionKey: string,
+    threadId: string | null = null,
+  ) {
     const existing = sessionStates.value[sessionKey];
     if (existing) {
       if (threadId !== null && existing.threadId !== threadId) {
@@ -205,15 +210,15 @@ export const useChatStore = defineStore("chat", () => {
       title: existing?.title || DEFAULT_CONVERSATION_TITLE,
       created_at: existing?.created_at || now,
       updated_at: now,
-      message_count: Math.max(existing?.message_count ?? 0, state.messages.length),
+      message_count: Math.max(
+        existing?.message_count ?? 0,
+        state.messages.length,
+      ),
       last_message_preview: query.slice(0, 200),
     });
   }
 
-  function getMessageById(
-    state: ConversationRuntimeState,
-    messageId: string,
-  ) {
+  function getMessageById(state: ConversationRuntimeState, messageId: string) {
     return state.messages.find((message) => message.id === messageId) ?? null;
   }
 
@@ -319,7 +324,11 @@ export const useChatStore = defineStore("chat", () => {
     targetThreadId: string,
   ) {
     const state = ensureSessionState(sessionKey, targetThreadId);
-    if (state.hasLoadedHistory || state.isResponding || state.messages.length > 0) {
+    if (
+      state.hasLoadedHistory ||
+      state.isResponding ||
+      state.messages.length > 0
+    ) {
       return;
     }
 
@@ -365,7 +374,11 @@ export const useChatStore = defineStore("chat", () => {
 
   function startNewConversation() {
     const current = getActiveState();
-    if (!current.threadId && !current.isResponding && current.messages.length === 0) {
+    if (
+      !current.threadId &&
+      !current.isResponding &&
+      current.messages.length === 0
+    ) {
       conversationsStore.setActive(null);
       return activeSessionKey.value;
     }
@@ -417,7 +430,10 @@ export const useChatStore = defineStore("chat", () => {
     if (!resolvedThreadId) {
       try {
         resolvedThreadId = await conversationsStore.createConversation();
-        resolvedSessionKey = renameSessionKey(sessionKeyAtStart, resolvedThreadId);
+        resolvedSessionKey = renameSessionKey(
+          sessionKeyAtStart,
+          resolvedThreadId,
+        );
         state = ensureSessionState(resolvedSessionKey, resolvedThreadId);
         state.threadId = resolvedThreadId;
 
@@ -476,8 +492,14 @@ export const useChatStore = defineStore("chat", () => {
       const responseThreadId = response.headers.get("x-thread-id");
       if (responseThreadId) {
         resolvedThreadId = responseThreadId;
-        resolvedSessionKey = renameSessionKey(sessionKeyAtStart, responseThreadId);
-        const currentState = ensureSessionState(resolvedSessionKey, responseThreadId);
+        resolvedSessionKey = renameSessionKey(
+          sessionKeyAtStart,
+          responseThreadId,
+        );
+        const currentState = ensureSessionState(
+          resolvedSessionKey,
+          responseThreadId,
+        );
         currentState.threadId = responseThreadId;
         upsertConversationSnapshot(responseThreadId, query, currentState);
 
@@ -553,7 +575,10 @@ export const useChatStore = defineStore("chat", () => {
         }
       }
     } catch (error) {
-      const latestState = ensureSessionState(resolvedSessionKey, resolvedThreadId);
+      const latestState = ensureSessionState(
+        resolvedSessionKey,
+        resolvedThreadId,
+      );
       const message = getMessageById(latestState, assistantMessage.id);
       if (message) {
         message.isThinking = false;
@@ -572,11 +597,15 @@ export const useChatStore = defineStore("chat", () => {
         });
       }
     } finally {
-      const latestState = ensureSessionState(resolvedSessionKey, resolvedThreadId);
+      const latestState = ensureSessionState(
+        resolvedSessionKey,
+        resolvedThreadId,
+      );
 
       latestState.isResponding = false;
       latestState.abortController = null;
-      latestState.hasLoadedHistory = latestState.hasLoadedHistory || Boolean(latestState.threadId);
+      latestState.hasLoadedHistory =
+        latestState.hasLoadedHistory || Boolean(latestState.threadId);
 
       if (latestState.threadId) {
         upsertConversationSnapshot(latestState.threadId, query, latestState);

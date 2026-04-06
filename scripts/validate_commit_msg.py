@@ -32,13 +32,20 @@ def main() -> int:
         return 1
 
     message = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
-    subject = next((line.strip() for line in message if line.strip()), "")
+    subject = next(
+        (
+            line.strip()
+            for line in message
+            if line.strip() and not line.lstrip().startswith("#")
+        ),
+        "",
+    )
 
     if not subject:
         print("commit message subject is empty", file=sys.stderr)
         return 1
 
-    if subject.startswith(("Merge ", "fixup! ", "squash! ")):
+    if subject.startswith(("Merge ", "Revert ", "fixup! ", "squash! ")):
         return 0
 
     match = COMMIT_RE.match(subject)

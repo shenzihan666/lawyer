@@ -158,7 +158,8 @@ export const useOpponentAnalysisStore = defineStore("opponent-analysis", () => {
   function sortRuns(items: OpponentAnalysisRunItem[]) {
     return [...items].sort(
       (left, right) =>
-        new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
+        new Date(right.updated_at).getTime() -
+        new Date(left.updated_at).getTime(),
     );
   }
 
@@ -231,7 +232,10 @@ export const useOpponentAnalysisStore = defineStore("opponent-analysis", () => {
     };
   }
 
-  function applyStreamPayload(runId: string, payload: OpponentAnalysisStreamPayload) {
+  function applyStreamPayload(
+    runId: string,
+    payload: OpponentAnalysisStreamPayload,
+  ) {
     if (payload.type === "snapshot") {
       if (detail.value?.run.id === runId) {
         detail.value = {
@@ -329,14 +333,17 @@ export const useOpponentAnalysisStore = defineStore("opponent-analysis", () => {
 
     isCreating.value = true;
     try {
-      const payload = await request<OpponentAnalysisDetail>("/opponent-analyses", {
-        method: "POST",
-        body: {
-          case_facts: caseFacts.value.trim(),
-          top_k: topK.value,
-          document_ids: selectedDocumentIds.value,
+      const payload = await request<OpponentAnalysisDetail>(
+        "/opponent-analyses",
+        {
+          method: "POST",
+          body: {
+            case_facts: caseFacts.value.trim(),
+            top_k: topK.value,
+            document_ids: selectedDocumentIds.value,
+          },
         },
-      });
+      );
       applyDetail(payload);
       activeTab.value = "overview";
       resetReplay();

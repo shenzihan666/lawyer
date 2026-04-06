@@ -15,7 +15,10 @@ const {
   isLoadingPreview,
 } = storeToRefs(caseSearchStore);
 
-const apiOrigin = (useRuntimeConfig().public.apiBase as string).replace(/\/api\/v1$/, "");
+const apiOrigin = (useRuntimeConfig().public.apiBase as string).replace(
+  /\/api\/v1$/,
+  "",
+);
 
 const fullPreviewContent = computed(() =>
   (preview.value?.fragments ?? [])
@@ -23,7 +26,11 @@ const fullPreviewContent = computed(() =>
     .filter((content): content is string => Boolean(content))
     .join("\n\n"),
 );
-const previewPdfUrl = computed(() => resolveApiUrl(preview.value?.preview_url) || resolveApiUrl(preview.value?.file_url));
+const previewPdfUrl = computed(
+  () =>
+    resolveApiUrl(preview.value?.preview_url) ||
+    resolveApiUrl(preview.value?.file_url),
+);
 
 const searchId = computed(() => {
   const value = route.query.searchId;
@@ -58,7 +65,9 @@ async function loadDetail() {
   }
 
   try {
-    const detailPayload = await caseSearchStore.fetchDetail(searchId.value, { quiet: true });
+    const detailPayload = await caseSearchStore.fetchDetail(searchId.value, {
+      quiet: true,
+    });
     const targetHitId = hitId.value ?? detailPayload.hits[0]?.id ?? null;
 
     if (targetHitId !== null) {
@@ -72,9 +81,13 @@ async function loadDetail() {
   }
 }
 
-watch([searchId, hitId], () => {
-  void loadDetail();
-}, { immediate: true });
+watch(
+  [searchId, hitId],
+  () => {
+    void loadDetail();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -88,7 +101,12 @@ watch([searchId, hitId], () => {
             这里展示你在检索页选中的案件结果。预览不会在结果页直接展开，只有点击结果后才会进入此页。
           </p>
         </div>
-        <UButton color="neutral" variant="ghost" icon="i-lucide-arrow-left" @click="goBack">
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-arrow-left"
+          @click="goBack"
+        >
           返回检索页
         </UButton>
       </div>
@@ -100,18 +118,34 @@ watch([searchId, hitId], () => {
           <div class="case-block__header">
             <div>
               <p class="case-block__eyebrow">Preview</p>
-              <h2>{{ activeHit?.original_filename || detail?.item.query_asset?.original_filename || '案件预览' }}</h2>
+              <h2>
+                {{
+                  activeHit?.original_filename ||
+                  detail?.item.query_asset?.original_filename ||
+                  "案件预览"
+                }}
+              </h2>
             </div>
             <div class="detail-badges">
-              <UBadge v-if="detail" color="primary" variant="subtle">{{ detail.item.result_count }} 条案件</UBadge>
-              <UBadge v-if="activeHit" color="warning" variant="subtle">{{ activeHit.matched_chunk_count }} 命中</UBadge>
+              <UBadge v-if="detail" color="primary" variant="subtle"
+                >{{ detail.item.result_count }} 条案件</UBadge
+              >
+              <UBadge v-if="activeHit" color="warning" variant="subtle"
+                >{{ activeHit.matched_chunk_count }} 命中</UBadge
+              >
             </div>
           </div>
 
-          <p v-if="detail" class="result-head__query">{{ detail.item.prepared_query }}</p>
+          <p v-if="detail" class="result-head__query">
+            {{ detail.item.prepared_query }}
+          </p>
           <div v-if="activeHit" class="detail-hit-meta">
             <span>#{{ activeHit.rank }}</span>
-            <span>{{ activeHit.matched_pages.length ? `页码 ${activeHit.matched_pages.join(' / ')}` : '未标记页码' }}</span>
+            <span>{{
+              activeHit.matched_pages.length
+                ? `页码 ${activeHit.matched_pages.join(" / ")}`
+                : "未标记页码"
+            }}</span>
             <span>score {{ formatScore(activeHit.score) }}</span>
           </div>
         </section>
@@ -120,7 +154,10 @@ watch([searchId, hitId], () => {
           正在整理案件预览，请稍候...
         </section>
 
-        <section v-else-if="!detail || !activeHit || !preview" class="empty-state">
+        <section
+          v-else-if="!detail || !activeHit || !preview"
+          class="empty-state"
+        >
           未找到可展示的预览内容，请返回结果页重新选择一个案件。
         </section>
 
@@ -147,16 +184,25 @@ watch([searchId, hitId], () => {
               <span>{{ preview.original_filename }}</span>
               <span>{{ preview.file_extension }}</span>
             </div>
-            <p class="preview-summary-card__excerpt">{{ preview.preview_excerpt }}</p>
+            <p class="preview-summary-card__excerpt">
+              {{ preview.preview_excerpt }}
+            </p>
           </div>
 
           <div class="match-chip-row">
-            <span v-for="page in activeHit.matched_pages" :key="page" class="match-chip">第 {{ page }} 页</span>
+            <span
+              v-for="page in activeHit.matched_pages"
+              :key="page"
+              class="match-chip"
+              >第 {{ page }} 页</span
+            >
           </div>
 
           <article class="full-content-card">
             <h3>案件全文</h3>
-            <p v-if="fullPreviewContent" class="full-content-card__body">{{ fullPreviewContent }}</p>
+            <p v-if="fullPreviewContent" class="full-content-card__body">
+              {{ fullPreviewContent }}
+            </p>
             <p v-else class="full-content-card__placeholder">
               当前案件暂无可用的结构化正文，请切换到“原 PDF”查看原始文档。
             </p>
@@ -188,8 +234,7 @@ watch([searchId, hitId], () => {
             <div class="original-preview-card__actions">
               <a
                 class="preview-link"
-                :href="resolveApiUrl(preview.file_url) || '#'
-                "
+                :href="resolveApiUrl(preview.file_url) || '#'"
                 target="_blank"
                 rel="noreferrer"
               >
@@ -198,8 +243,7 @@ watch([searchId, hitId], () => {
               <a
                 v-if="resolveApiUrl(preview.preview_url)"
                 class="preview-link preview-link--primary"
-                :href="resolveApiUrl(preview.preview_url) || '#'
-                "
+                :href="resolveApiUrl(preview.preview_url) || '#'"
                 target="_blank"
                 rel="noreferrer"
               >
@@ -227,8 +271,16 @@ watch([searchId, hitId], () => {
 .case-search-page {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(222, 231, 255, 0.78), transparent 22%),
-    radial-gradient(circle at bottom right, rgba(247, 229, 201, 0.72), transparent 28%),
+    radial-gradient(
+      circle at top left,
+      rgba(222, 231, 255, 0.78),
+      transparent 22%
+    ),
+    radial-gradient(
+      circle at bottom right,
+      rgba(247, 229, 201, 0.72),
+      transparent 28%
+    ),
     linear-gradient(180deg, #f6f2ea, #fbfaf6);
   display: flex;
   flex-direction: column;
@@ -258,7 +310,11 @@ watch([searchId, hitId], () => {
   gap: 18px;
   padding: 26px 28px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(250, 245, 235, 0.92)),
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.95),
+      rgba(250, 245, 235, 0.92)
+    ),
     repeating-linear-gradient(
       -18deg,
       rgba(49, 88, 255, 0.03),
@@ -437,7 +493,11 @@ watch([searchId, hitId], () => {
 
 .fragment-card--matched {
   border-color: #bfd0ff;
-  background: linear-gradient(180deg, rgba(251, 252, 255, 0.96), rgba(255, 255, 255, 0.9));
+  background: linear-gradient(
+    180deg,
+    rgba(251, 252, 255, 0.96),
+    rgba(255, 255, 255, 0.9)
+  );
 }
 
 .fragment-card--focused {

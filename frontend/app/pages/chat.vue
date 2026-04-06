@@ -38,7 +38,9 @@ const indexedDocuments = computed(() =>
 );
 
 const selectedDocuments = computed(() =>
-  indexedDocuments.value.filter((item) => selectedDocumentIds.value.includes(item.id)),
+  indexedDocuments.value.filter((item) =>
+    selectedDocumentIds.value.includes(item.id),
+  ),
 );
 
 const topKOptions = [3, 5, 8].map((value) => ({
@@ -52,7 +54,9 @@ const latestCitationCountLabel = computed(() => {
   const count = lastAssistantMessage.value?.citations.length ?? 0;
   return `${count} 条引用`;
 });
-const indexedCountLabel = computed(() => `${indexedDocuments.value.length} 份已索引`);
+const indexedCountLabel = computed(
+  () => `${indexedDocuments.value.length} 份已索引`,
+);
 const scopeLabel = computed(() =>
   selectedDocuments.value.length
     ? `限定 ${selectedDocuments.value.length} 份文档`
@@ -275,7 +279,6 @@ onMounted(async () => {
             </div>
           </div>
 
-
           <div class="chat-sidebar__stats">
             <div class="chat-stat">
               <span class="chat-stat__label">知识库</span>
@@ -344,15 +347,25 @@ onMounted(async () => {
                 v-for="item in indexedDocuments"
                 :key="item.id"
                 class="chat-doc-item"
-                :class="{ 'chat-doc-item--selected': isDocumentSelected(item.id) }"
+                :class="{
+                  'chat-doc-item--selected': isDocumentSelected(item.id),
+                }"
                 @click="toggleDocumentSelection(item.id)"
               >
                 <div
                   class="chat-doc-item__check"
-                  :class="{ 'chat-doc-item__check--selected': isDocumentSelected(item.id) }"
+                  :class="{
+                    'chat-doc-item__check--selected': isDocumentSelected(
+                      item.id,
+                    ),
+                  }"
                 >
                   <UIcon
-                    :name="isDocumentSelected(item.id) ? 'i-lucide-check' : 'i-lucide-plus'"
+                    :name="
+                      isDocumentSelected(item.id)
+                        ? 'i-lucide-check'
+                        : 'i-lucide-plus'
+                    "
                     class="h-4 w-4"
                   />
                 </div>
@@ -375,11 +388,17 @@ onMounted(async () => {
               <div class="status-chip">
                 <span
                   class="status-dot"
-                  :class="isResponding || indexedDocuments.length ? 'status-dot--live' : 'status-dot--idle'"
+                  :class="
+                    isResponding || indexedDocuments.length
+                      ? 'status-dot--live'
+                      : 'status-dot--idle'
+                  "
                 />
                 <span>{{ headerStatusLabel }}</span>
               </div>
-              <h2 class="chat-stage__title">{{ currentConversationTitle || '法律问答会话' }}</h2>
+              <h2 class="chat-stage__title">
+                {{ currentConversationTitle || "法律问答会话" }}
+              </h2>
               <p class="chat-stage__hint">{{ headerHint }}</p>
             </div>
 
@@ -415,10 +434,7 @@ onMounted(async () => {
           </header>
 
           <div ref="feedRef" class="chat-feed">
-            <div
-              v-if="!messages.length"
-              class="welcome-state"
-            >
+            <div v-if="!messages.length" class="welcome-state">
               <div class="welcome-state__icon">
                 <UIcon name="i-lucide-message-circle-heart" class="h-10 w-10" />
               </div>
@@ -485,7 +501,11 @@ onMounted(async () => {
                     </div>
 
                     <div
-                      v-if="message.isThinking && !message.steps.length && !message.text"
+                      v-if="
+                        message.isThinking &&
+                        !message.steps.length &&
+                        !message.text
+                      "
                       class="thinking-line"
                     >
                       <span class="thinking-dots" aria-hidden="true">
@@ -502,11 +522,17 @@ onMounted(async () => {
                         @click="toggleStepSection(message.id)"
                       >
                         <UIcon
-                          :name="isStepSectionExpanded(message.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                          :name="
+                            isStepSectionExpanded(message.id)
+                              ? 'i-lucide-chevron-up'
+                              : 'i-lucide-chevron-down'
+                          "
                           class="step-toggle__icon"
                         />
                         <span>检索过程</span>
-                        <span class="step-toggle__count">{{ message.steps.length }} 步</span>
+                        <span class="step-toggle__count"
+                          >{{ message.steps.length }} 步</span
+                        >
                       </button>
 
                       <div
@@ -519,7 +545,8 @@ onMounted(async () => {
                           class="step-item"
                           :class="{
                             'step-item--active':
-                              message.isStreaming && index === message.steps.length - 1,
+                              message.isStreaming &&
+                              index === message.steps.length - 1,
                             'step-item--error': step.status === 'error',
                           }"
                         >
@@ -563,7 +590,11 @@ onMounted(async () => {
                         @click="toggleCitationSection(message.id)"
                       >
                         <UIcon
-                          :name="isCitationSectionExpanded(message.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                          :name="
+                            isCitationSectionExpanded(message.id)
+                              ? 'i-lucide-chevron-up'
+                              : 'i-lucide-chevron-down'
+                          "
                           class="citation-toggle__icon"
                         />
                         <span>{{ message.citations.length }} 条引用</span>
@@ -580,11 +611,20 @@ onMounted(async () => {
                         >
                           <button
                             class="citation-card__toggle"
-                            @click="toggleIndividualCitation(message.id, citation.chunk_id)"
+                            @click="
+                              toggleIndividualCitation(
+                                message.id,
+                                citation.chunk_id,
+                              )
+                            "
                           >
                             <div class="min-w-0 flex-1">
                               <div class="flex flex-wrap items-center gap-2">
-                                <UBadge color="primary" variant="subtle" size="xs">
+                                <UBadge
+                                  color="primary"
+                                  variant="subtle"
+                                  size="xs"
+                                >
                                   [{{ citation.citation_number }}]
                                 </UBadge>
                                 <p class="citation-card__title">
@@ -594,7 +634,9 @@ onMounted(async () => {
 
                               <div class="citation-card__meta">
                                 <span class="citation-chip">
-                                  L{{ citation.chunk_level }} / #{{ citation.chunk_index }}
+                                  L{{ citation.chunk_level }} / #{{
+                                    citation.chunk_index
+                                  }}
                                 </span>
                                 <span class="citation-chip">
                                   第 {{ citation.page_number || 0 }} 页
@@ -610,26 +652,37 @@ onMounted(async () => {
                                 {{ citation.chunk_id }}
                               </span>
                               <UIcon
-                                :name="isIndividualCitationExpanded(message.id, citation.chunk_id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                                :name="
+                                  isIndividualCitationExpanded(
+                                    message.id,
+                                    citation.chunk_id,
+                                  )
+                                    ? 'i-lucide-chevron-up'
+                                    : 'i-lucide-chevron-down'
+                                "
                                 class="citation-card__expand-icon"
                               />
                             </div>
                           </button>
 
                           <div
-                            v-show="isIndividualCitationExpanded(message.id, citation.chunk_id)"
+                            v-show="
+                              isIndividualCitationExpanded(
+                                message.id,
+                                citation.chunk_id,
+                              )
+                            "
                             class="citation-snippet-wrapper"
                           >
-                            <p class="citation-snippet">{{ citation.snippet }}</p>
+                            <p class="citation-snippet">
+                              {{ citation.snippet }}
+                            </p>
                           </div>
                         </article>
                       </div>
                     </div>
 
-                    <details
-                      v-if="message.trace"
-                      class="trace-panel"
-                    >
+                    <details v-if="message.trace" class="trace-panel">
                       <summary>查看检索元数据</summary>
                       <pre>{{ formatTrace(message.trace) }}</pre>
                     </details>
@@ -682,8 +735,16 @@ onMounted(async () => {
 .chat-page {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(221, 228, 255, 0.7), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(244, 234, 216, 0.82), transparent 30%),
+    radial-gradient(
+      circle at top left,
+      rgba(221, 228, 255, 0.7),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at bottom right,
+      rgba(244, 234, 216, 0.82),
+      transparent 30%
+    ),
     #fcfbf8;
 }
 
@@ -704,7 +765,11 @@ onMounted(async () => {
   gap: 18px;
   border-radius: 32px;
   border: 1px solid #ebe5da;
-  background: linear-gradient(180deg, rgba(247, 244, 238, 0.98), rgba(255, 255, 255, 0.94));
+  background: linear-gradient(
+    180deg,
+    rgba(247, 244, 238, 0.98),
+    rgba(255, 255, 255, 0.94)
+  );
   padding: 24px;
   box-shadow: 0 20px 60px rgba(34, 24, 12, 0.06);
   min-height: 0;
@@ -820,7 +885,10 @@ onMounted(async () => {
   border: 1px solid #eee7db;
   background: #fcfbf8;
   padding: 12px 13px;
-  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    transform 0.15s;
 }
 
 .chat-doc-item:hover {
@@ -943,8 +1011,16 @@ onMounted(async () => {
   overflow-y: auto;
   padding: 28px 24px 20px;
   background:
-    linear-gradient(180deg, rgba(252, 251, 248, 0.88), rgba(252, 251, 248, 0.52)),
-    radial-gradient(circle at top center, rgba(238, 242, 255, 0.55), transparent 24%);
+    linear-gradient(
+      180deg,
+      rgba(252, 251, 248, 0.88),
+      rgba(252, 251, 248, 0.52)
+    ),
+    radial-gradient(
+      circle at top center,
+      rgba(238, 242, 255, 0.55),
+      transparent 24%
+    );
 }
 
 .welcome-state {
@@ -1112,7 +1188,9 @@ onMounted(async () => {
   font-weight: 600;
   color: #71717a;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .step-toggle:hover {
@@ -1222,7 +1300,9 @@ onMounted(async () => {
   font-weight: 600;
   color: #71717a;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .citation-toggle:hover {
@@ -1271,7 +1351,9 @@ onMounted(async () => {
 }
 
 .citation-chip.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
 }
 
 .citation-card {

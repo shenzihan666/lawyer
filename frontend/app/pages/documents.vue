@@ -52,10 +52,13 @@ const allManagementSelected = computed(
     selectedManagementIds.value.length === indexedDocuments.value.length,
 );
 const hasIndexedDocuments = computed(() => indexedDocuments.value.length > 0);
-const hasUnindexedDocuments = computed(() => unindexedDocuments.value.length > 0);
+const hasUnindexedDocuments = computed(
+  () => unindexedDocuments.value.length > 0,
+);
 const showVectorizationProgress = computed(
   () =>
-    vectorizationProgress.value.active || vectorizationProgress.value.percent > 0,
+    vectorizationProgress.value.active ||
+    vectorizationProgress.value.percent > 0,
 );
 const trackedVectorizationDocuments = computed(() => {
   const trackedIds = new Set(vectorizationProgress.value.document_ids);
@@ -207,7 +210,10 @@ function toggleUploadDocumentSelection(documentId: string, checked: boolean) {
   toggleDocumentSelection(uploadSelectedRows, documentId, checked);
 }
 
-function toggleManagementDocumentSelection(documentId: string, checked: boolean) {
+function toggleManagementDocumentSelection(
+  documentId: string,
+  checked: boolean,
+) {
   toggleDocumentSelection(managementSelectedRows, documentId, checked);
 }
 
@@ -274,9 +280,7 @@ onMounted(() => {
           <div class="flex items-center justify-between">
             <div>
               <h2 class="text-base font-semibold text-zinc-900">导入文档</h2>
-              <p class="mt-1 text-sm text-zinc-500">
-                支持拖拽和批量导入。
-              </p>
+              <p class="mt-1 text-sm text-zinc-500">支持拖拽和批量导入。</p>
             </div>
           </div>
         </template>
@@ -356,7 +360,9 @@ onMounted(() => {
         class="rounded-[28px] ring-1 ring-[#ebe5da] shadow-[0_20px_60px_rgba(34,24,12,0.05)]"
       >
         <template #header>
-          <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div
+            class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between"
+          >
             <div>
               <h2 class="text-base font-semibold text-zinc-900">上传管理</h2>
               <p class="mt-1 text-sm text-zinc-500">
@@ -399,7 +405,8 @@ onMounted(() => {
                 一键取消全选
               </UButton>
               <UBadge color="neutral" variant="subtle" size="sm">
-                已选 {{ selectedUploadIds.length }} / {{ uploadManagedDocuments.length }}
+                已选 {{ selectedUploadIds.length }} /
+                {{ uploadManagedDocuments.length }}
               </UBadge>
               <template v-if="hasUploadSelection">
                 <UButton
@@ -453,13 +460,17 @@ onMounted(() => {
               <p class="text-xs text-zinc-500">
                 {{ vectorizationProgress.indexed }} indexed ·
                 {{ vectorizationProgress.failed }} failed ·
-                {{ vectorizationProgress.indexing + vectorizationProgress.queued }}
+                {{
+                  vectorizationProgress.indexing + vectorizationProgress.queued
+                }}
                 active
               </p>
             </div>
           </div>
 
-          <div class="mt-4 h-2 overflow-hidden rounded-full bg-white ring-1 ring-[#eadfce]">
+          <div
+            class="mt-4 h-2 overflow-hidden rounded-full bg-white ring-1 ring-[#eadfce]"
+          >
             <div
               class="h-full rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-emerald-500 transition-all duration-500 ease-out"
               :style="{ width: `${vectorizationProgress.percent}%` }"
@@ -498,7 +509,9 @@ onMounted(() => {
                 :indeterminate="hasUploadSelection && !allUploadSelected"
                 @update:model-value="
                   ($event) =>
-                    $event ? selectAllDocuments() : clearUploadSelectedDocuments()
+                    $event
+                      ? selectAllDocuments()
+                      : clearUploadSelectedDocuments()
                 "
               />
             </div>
@@ -512,7 +525,10 @@ onMounted(() => {
                 "
                 @update:model-value="
                   ($event) =>
-                    toggleUploadDocumentSelection((row.original as any).id, !!$event)
+                    toggleUploadDocumentSelection(
+                      (row.original as any).id,
+                      !!$event,
+                    )
                 "
               />
             </div>
@@ -632,7 +648,9 @@ onMounted(() => {
       class="rounded-[28px] ring-1 ring-[#ebe5da] shadow-[0_20px_60px_rgba(34,24,12,0.05)]"
     >
       <template #header>
-        <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div
+          class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"
+        >
           <div>
             <h2 class="text-base font-semibold text-zinc-900">知识库管理</h2>
             <p class="mt-1 text-sm text-zinc-500">
@@ -670,7 +688,8 @@ onMounted(() => {
             </UButton>
             <template v-if="hasManagementSelection">
               <UBadge color="neutral" variant="subtle" size="sm">
-                已选 {{ selectedManagementIds.length }} / {{ indexedDocuments.length }}
+                已选 {{ selectedManagementIds.length }} /
+                {{ indexedDocuments.length }}
               </UBadge>
               <UButton
                 color="error"
@@ -783,8 +802,7 @@ onMounted(() => {
               }}</span
             >
             <span
-              >上传于
-              {{ formatDate((row.original as any).uploaded_at) }}</span
+              >上传于 {{ formatDate((row.original as any).uploaded_at) }}</span
             >
           </div>
         </template>
