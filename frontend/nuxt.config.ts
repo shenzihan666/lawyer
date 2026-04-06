@@ -9,6 +9,18 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   css: [mainCss],
   modules: ["@nuxt/ui", "@pinia/nuxt"],
+  fonts: {
+    providers: {
+      google: false,
+      googleicons: false,
+    },
+    provider: "local",
+  },
+  icon: {
+    serverBundle: {
+      collections: ["lucide", "heroicons"],
+    },
+  },
   imports: {
     dirs: ["stores"],
   },
