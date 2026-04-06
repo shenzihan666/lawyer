@@ -58,6 +58,25 @@ export type ReviewClause = {
   updated_at: string;
 };
 
+export type ReviewChecklistItem = {
+  key: string;
+  title: string;
+  risk_level: string;
+  description: string;
+  related_clauses: string[];
+  related_knowledge_points: string[];
+  source_block_text?: string;
+};
+
+export type ReviewEvidenceItem = {
+  clause_id: number | null;
+  clause_path: string | null;
+  clause_title: string | null;
+  excerpt: string | null;
+  page_start: number | null;
+  page_end: number | null;
+};
+
 export type ReviewFinding = {
   id: number;
   review_job_id: string;
@@ -77,6 +96,8 @@ export type ReviewFinding = {
   clause_path: string | null;
   page_start: number | null;
   page_end: number | null;
+  checklist_item: ReviewChecklistItem;
+  evidence_items: ReviewEvidenceItem[];
 };
 
 export type ReviewChecklistSummary = {
@@ -104,6 +125,10 @@ export type ReviewJobDetail = {
   extensions: Record<string, unknown>;
 };
 
+export type ReviewSettings = {
+  global_rule_prompt: string;
+};
+
 type ReviewTemplateListResponse = {
   items: ReviewTemplateItem[];
   affected_ids?: string[];
@@ -129,10 +154,13 @@ export const useContractReviewStore = defineStore("contractReview", () => {
     "launch" | "results" | "template-upload" | "template-list"
   >("launch");
   const detail = ref<ReviewJobDetail | null>(null);
+  const settings = ref<ReviewSettings>({ global_rule_prompt: "" });
 
   const isLoadingTemplates = ref(false);
   const isLoadingJobs = ref(false);
   const isLoadingDetail = ref(false);
+  const isLoadingSettings = ref(false);
+  const isSavingSettings = ref(false);
   const isCreatingJob = ref(false);
   const isUploadingTemplate = ref(false);
   const deletingTemplateIds = ref<string[]>([]);
@@ -158,6 +186,54 @@ export const useContractReviewStore = defineStore("contractReview", () => {
     pollTimer = setInterval(() => {
       void fetchJobDetail(jobId, { quiet: true });
     }, 1600);
+  }
+
+  async function fetchSettings(options?: { quiet?: boolean }) {
+    if (!options?.quiet) {
+      isLoadingSettings.value = true;
+    }
+    try {
+      settings.value = await request<ReviewSettings>("/contract-review/settings");
+      return settings.value;
+    } catch (error) {
+      if (!options?.quiet) {
+        toast.add({
+          title: "全局规则加载失败",
+          description: String(error),
+          color: "error",
+        });
+      }
+      throw error;
+    } finally {
+      if (!options?.quiet) {
+        isLoadingSettings.value = false;
+      }
+    }
+  }
+
+  async function saveSettings(globalRulePrompt: string) {
+    isSavingSettings.value = true;
+    try {
+      settings.value = await request<ReviewSettings>("/contract-review/settings", {
+        method: "PATCH",
+        body: { global_rule_prompt: globalRulePrompt },
+      });
+      toast.add({
+        title: "全局规则已保存",
+        description: "后续审查任务会自动带入该规则。",
+        color: "success",
+      });
+      return settings.value;
+    } catch (error) {
+      toast.add({
+        title: "全局规则保存失败",
+        description: String(error),
+        color: "error",
+      });
+      throw error;
+    } finally {
+      isSavingSettings.value = false;
+    }
   }
 
   async function fetchTemplates() {
@@ -286,19 +362,31 @@ export const useContractReviewStore = defineStore("contractReview", () => {
     }
   }
 
-  async function uploadTemplate(payload: {
-    file: File;
-    name: string;
-    description: string;
-  }) {
+  function deriveTemplateName(fileName: string) {
+    return fileName.replace(/\.[^/.]+$/, "").trim() || "审查清单";
+  }
+
+  async function uploadTemplate(
+    payload: {
+      file: File;
+      name?: string;
+      description?: string;
+    },
+    options?: { silent?: boolean; keepLoading?: boolean },
+  ) {
     const formData = new FormData();
     formData.append("file", payload.file);
-    formData.append("name", payload.name.trim());
-    if (payload.description.trim()) {
+    formData.append(
+      "name",
+      (payload.name ?? deriveTemplateName(payload.file.name)).trim(),
+    );
+    if (payload.description?.trim()) {
       formData.append("description", payload.description.trim());
     }
 
-    isUploadingTemplate.value = true;
+    if (!options?.keepLoading) {
+      isUploadingTemplate.value = true;
+    }
     try {
       const response = await request<ReviewTemplateListResponse>(
         "/contract-review/templates/upload",
@@ -308,24 +396,71 @@ export const useContractReviewStore = defineStore("contractReview", () => {
         },
       );
       templates.value = response.items;
-      toast.add({
-        title: "审查清单已入库",
-        description: "审查清单已经加入工作台清单库。",
-        color: "success",
-      });
+      if (!options?.silent) {
+        toast.add({
+          title: "审查清单已入库",
+          description: "Excel 审查清单已经加入工作台清单库。",
+          color: "success",
+        });
+      }
     } catch (error) {
-      toast.add({
-        title: "审查清单上传失败",
-        description: String(error),
-        color: "error",
-      });
+      if (!options?.silent) {
+        toast.add({
+          title: "审查清单上传失败",
+          description: String(error),
+          color: "error",
+        });
+      }
       throw error;
     } finally {
-      isUploadingTemplate.value = false;
+      if (!options?.keepLoading) {
+        isUploadingTemplate.value = false;
+      }
     }
   }
 
-  async function deleteTemplate(templateId: string) {
+  async function uploadTemplates(files: File[]) {
+    if (!files.length) return;
+
+    isUploadingTemplate.value = true;
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const file of files) {
+      try {
+        await uploadTemplate(
+          { file, name: deriveTemplateName(file.name) },
+          { silent: true, keepLoading: true },
+        );
+        successCount += 1;
+      } catch {
+        failedCount += 1;
+      }
+    }
+
+    isUploadingTemplate.value = false;
+
+    if (successCount > 0) {
+      toast.add({
+        title: "审查清单已入库",
+        description: `已成功上传 ${successCount} 个文件。`,
+        color: "success",
+      });
+    }
+
+    if (failedCount > 0) {
+      toast.add({
+        title: "部分上传失败",
+        description: `${failedCount} 个文件上传失败，请重试。`,
+        color: "error",
+      });
+    }
+  }
+
+  async function deleteTemplate(
+    templateId: string,
+    options?: { silent?: boolean; keepState?: boolean },
+  ) {
     deletingTemplateIds.value = [...deletingTemplateIds.value, templateId];
     try {
       const response = await request<ReviewTemplateListResponse>(
@@ -335,21 +470,28 @@ export const useContractReviewStore = defineStore("contractReview", () => {
         },
       );
       templates.value = response.items;
-      toast.add({
-        title: "审查清单已删除",
-        description: "审查清单已从工作台清单库移除。",
-        color: "success",
-      });
+      if (!options?.silent) {
+        toast.add({
+          title: "审查清单已删除",
+          description: "审查清单已从工作台清单库移除。",
+          color: "success",
+        });
+      }
     } catch (error) {
-      toast.add({
-        title: "审查清单删除失败",
-        description: String(error),
-        color: "error",
-      });
+      if (!options?.silent) {
+        toast.add({
+          title: "审查清单删除失败",
+          description: String(error),
+          color: "error",
+        });
+      }
+      throw error;
     } finally {
-      deletingTemplateIds.value = deletingTemplateIds.value.filter(
-        (id) => id !== templateId,
-      );
+      if (!options?.keepState) {
+        deletingTemplateIds.value = deletingTemplateIds.value.filter(
+          (id) => id !== templateId,
+        );
+      }
     }
   }
 
@@ -377,13 +519,13 @@ export const useContractReviewStore = defineStore("contractReview", () => {
       }
 
       toast.add({
-        title: "\u4efb\u52a1\u5df2\u79fb\u9664",
-        description: "\u5408\u540c\u5ba1\u67e5\u4efb\u52a1\u5df2\u4ece\u5217\u8868\u4e2d\u5220\u9664\u3002",
+        title: "任务已移除",
+        description: "合同审查任务已从列表中删除。",
         color: "success",
       });
     } catch (error) {
       toast.add({
-        title: "\u79fb\u9664\u4efb\u52a1\u5931\u8d25",
+        title: "移除任务失败",
         description: String(error),
         color: "error",
       });
@@ -418,18 +560,24 @@ export const useContractReviewStore = defineStore("contractReview", () => {
     activeJobId,
     activeTab,
     detail,
+    settings,
     isLoadingTemplates,
     isLoadingJobs,
     isLoadingDetail,
+    isLoadingSettings,
+    isSavingSettings,
     isCreatingJob,
     isUploadingTemplate,
     deletingTemplateIds,
     deletingJobIds,
+    fetchSettings,
+    saveSettings,
     fetchTemplates,
     fetchJobs,
     fetchJobDetail,
     createReviewJob,
     uploadTemplate,
+    uploadTemplates,
     deleteTemplate,
     deleteJob,
     selectJob,

@@ -7,25 +7,27 @@ const {
   activeTab,
   detail,
   jobs,
+  settings,
   templates,
   isCreatingJob,
   isLoadingDetail,
   isLoadingJobs,
+  isLoadingSettings,
   isLoadingTemplates,
   isUploadingTemplate,
+  isSavingSettings,
   deletingTemplateIds,
   deletingJobIds,
 } = storeToRefs(store);
 
-const acceptedFormats = ".pdf,.docx";
+const reviewAcceptedFormats = ".pdf,.docx";
+const templateAcceptedFormats = ".xlsx";
 const reviewFile = ref<File | null>(null);
-const templateFile = ref<File | null>(null);
+const templateFiles = ref<File[]>([]);
 const reviewName = ref("");
+const globalRuleDraft = ref("");
 const selectedTemplateId = ref("");
-const templateForm = reactive({
-  name: "",
-  description: "",
-});
+const selectedUploadRows = ref<Record<string, boolean>>({});
 
 const tabs = [
   { key: "launch", label: "发起审查", icon: "i-lucide-rocket" },
@@ -43,6 +45,37 @@ const selectedJob = computed(
     detail.value?.job ??
     jobs.value.find((item) => item.id === store.activeJobId) ??
     null,
+);
+
+const stagedTemplateRows = computed(() =>
+  templateFiles.value.map((file) => ({
+    key: `${file.name}-${file.size}-${file.lastModified}`,
+    file,
+  })),
+);
+const selectedUploadKeys = computed(() =>
+  stagedTemplateRows.value
+    .map((item) => item.key)
+    .filter((key) => Boolean(selectedUploadRows.value[key])),
+);
+const selectedUploadFiles = computed(() =>
+  stagedTemplateRows.value
+    .filter((item) => Boolean(selectedUploadRows.value[item.key]))
+    .map((item) => item.file),
+);
+const hasUploadSelection = computed(() => selectedUploadKeys.value.length > 0);
+const allUploadSelected = computed(
+  () =>
+    stagedTemplateRows.value.length > 0 &&
+    selectedUploadKeys.value.length === stagedTemplateRows.value.length,
+);
+
+watch(
+  () => settings.value.global_rule_prompt,
+  (value) => {
+    globalRuleDraft.value = value;
+  },
+  { immediate: true },
 );
 
 function formatDate(value: string | null) {
@@ -83,9 +116,20 @@ function getStatusColor(status: string) {
 
 function getFindingColor(status: string, severity: string) {
   if (status === "pass") return "success";
-  if (severity === "high") return "error";
-  if (severity === "medium") return "warning";
+  if (status === "fail") return "error";
+  if (status === "warn" || severity === "medium") return "warning";
   return "neutral";
+}
+
+function getFindingStatusLabel(status: string) {
+  return (
+    {
+      pass: "通过",
+      warn: "预警",
+      fail: "失败",
+      missing: "缺失",
+    }[status] || status
+  );
 }
 
 function isJobRemovable(status: string) {
@@ -100,6 +144,11 @@ function isJobProcessing(status: string) {
   return ["queued", "running"].includes(status);
 }
 
+function getTemplateChecklistCount(template: { config_json: Record<string, unknown> }) {
+  const checklist = template.config_json.checklist;
+  return Array.isArray(checklist) ? checklist.length : 0;
+}
+
 function onReviewFileChange(event: Event) {
   const input = event.target as HTMLInputElement;
   reviewFile.value = input.files?.[0] ?? null;
@@ -107,7 +156,41 @@ function onReviewFileChange(event: Event) {
 
 function onTemplateFileChange(event: Event) {
   const input = event.target as HTMLInputElement;
-  templateFile.value = input.files?.[0] ?? null;
+  const files = [...(input.files ?? [])];
+  mergeTemplateFiles(files);
+  input.value = "";
+}
+
+function onTemplateDrop(event: DragEvent) {
+  const files = [...(event.dataTransfer?.files ?? [])];
+  mergeTemplateFiles(files);
+}
+
+function mergeTemplateFiles(files: File[]) {
+  const next = new Map(
+    templateFiles.value.map((file) => [
+      `${file.name}-${file.size}-${file.lastModified}`,
+      file,
+    ]),
+  );
+  for (const file of files) {
+    next.set(`${file.name}-${file.size}-${file.lastModified}`, file);
+  }
+  templateFiles.value = [...next.values()];
+}
+
+function removeTemplateFile(target: File) {
+  templateFiles.value = templateFiles.value.filter(
+    (file) =>
+      file.name !== target.name ||
+      file.size !== target.size ||
+      file.lastModified !== target.lastModified,
+  );
+}
+
+function clearTemplateDraft() {
+  templateFiles.value = [];
+  selectedUploadRows.value = {};
 }
 
 async function submitReview() {
@@ -120,28 +203,71 @@ async function submitReview() {
 }
 
 async function submitTemplate() {
-  if (!templateFile.value || !templateForm.name.trim()) return;
-  await store.uploadTemplate({
-    file: templateFile.value,
-    name: templateForm.name,
-    description: templateForm.description,
-  });
-  templateFile.value = null;
-  templateForm.name = "";
-  templateForm.description = "";
+  if (!selectedUploadFiles.value.length) return;
+  const keySet = new Set(selectedUploadKeys.value);
+  await store.uploadTemplates(selectedUploadFiles.value);
+  templateFiles.value = stagedTemplateRows.value
+    .filter((item) => !keySet.has(item.key))
+    .map((item) => item.file);
+  selectedUploadRows.value = {};
+  const firstTemplate = templates.value[0];
+  if (firstTemplate && !selectedTemplateId.value) {
+    selectedTemplateId.value = firstTemplate.id;
+  }
+}
+
+async function submitGlobalRule() {
+  await store.saveSettings(globalRuleDraft.value);
+}
+
+function deleteSelectedUploadFiles() {
+  if (!selectedUploadKeys.value.length) return;
+  const keySet = new Set(selectedUploadKeys.value);
+  templateFiles.value = stagedTemplateRows.value
+    .filter((item) => !keySet.has(item.key))
+    .map((item) => item.file);
+  selectedUploadRows.value = {};
+}
+
+function toggleUploadSelection(key: string, checked: boolean) {
+  if (checked) {
+    selectedUploadRows.value = {
+      ...selectedUploadRows.value,
+      [key]: true,
+    };
+    return;
+  }
+
+  const next = { ...selectedUploadRows.value };
+  delete next[key];
+  selectedUploadRows.value = next;
+}
+
+function selectAllUploadFiles() {
+  const next: Record<string, boolean> = {};
+  for (const item of stagedTemplateRows.value) {
+    next[item.key] = true;
+  }
+  selectedUploadRows.value = next;
+}
+
+function clearSelectedUploadFiles() {
+  selectedUploadRows.value = {};
 }
 
 async function handleDeleteJob(jobId: string) {
-  if (
-    !window.confirm("移除后会删除该任务及其导出结果，确定继续吗？")
-  ) {
+  if (!window.confirm("移除后会删除该任务及其导出结果，确定继续吗？")) {
     return;
   }
   await store.deleteJob(jobId);
 }
 
 onMounted(async () => {
-  await Promise.all([store.fetchTemplates(), store.fetchJobs()]);
+  await Promise.all([
+    store.fetchSettings(),
+    store.fetchTemplates(),
+    store.fetchJobs(),
+  ]);
   const firstTemplate = templates.value[0];
   if (firstTemplate && !selectedTemplateId.value) {
     selectedTemplateId.value = firstTemplate.id;
@@ -163,6 +289,10 @@ onBeforeUnmount(() => {
       <div class="hero-copy">
         <p class="eyebrow">Contract Review</p>
         <h1>合同审查</h1>
+        <p class="copy">
+          上传 Excel 审查清单后，系统会将清单项与全局规则一起注入 AI，
+          对待审合同生成逐项、可追溯的结构化审查结果。
+        </p>
       </div>
       <div class="stats hero-stats">
         <div class="stat">
@@ -209,7 +339,7 @@ onBeforeUnmount(() => {
           <label class="dropzone">
             <input
               type="file"
-              :accept="acceptedFormats"
+              :accept="reviewAcceptedFormats"
               class="hidden"
               @change="onReviewFileChange"
             />
@@ -241,7 +371,7 @@ onBeforeUnmount(() => {
               <label>审查名称</label>
               <UInput
                 v-model="reviewName"
-                placeholder="例如：供应商框架协议首轮审查"
+                placeholder="例如：股权转让协议首轮审查"
               />
             </div>
             <div class="field">
@@ -250,7 +380,7 @@ onBeforeUnmount(() => {
                 v-model="selectedTemplateId"
                 :items="
                   templates.map((item) => ({
-                    label: item.name,
+                    label: `${item.name}（${getTemplateChecklistCount(item)} 项）`,
                     value: item.id,
                   }))
                 "
@@ -260,13 +390,29 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <div class="rule-banner">
+            <div>
+              <p class="title">当前全局规则</p>
+              <p class="subtle">
+                {{
+                  settings.global_rule_prompt ||
+                  "尚未设置，全局规则为空时只使用所选清单内容。"
+                }}
+              </p>
+            </div>
+            <UButton color="neutral" variant="ghost" @click="activeTab = 'template-list'">
+              配置全局规则
+            </UButton>
+          </div>
+
           <div class="actions">
             <UButton
               color="neutral"
               variant="ghost"
               @click="activeTab = 'template-upload'"
-              >管理清单</UButton
             >
+              管理清单
+            </UButton>
             <UButton
               color="primary"
               :disabled="!reviewFile || !selectedTemplateId"
@@ -301,8 +447,9 @@ onBeforeUnmount(() => {
                 color="primary"
                 :disabled="!detail?.export.available"
                 @click="store.downloadExport()"
-                >导出 DOCX</UButton
               >
+                导出 DOCX
+              </UButton>
             </div>
           </div>
         </template>
@@ -318,101 +465,159 @@ onBeforeUnmount(() => {
                 {{ detail.job.original_filename }} ·
                 {{ detail.template?.name || "未绑定清单" }}
               </p>
+              <p v-if="detail.job.failure_reason" class="error-text">
+                {{ detail.job.failure_reason }}
+              </p>
             </div>
-            <UBadge
-              :color="getStatusColor(detail.job.status) as any"
-              variant="subtle"
-            >
-              {{ getStatusLabel(detail.job.status) }}
-            </UBadge>
+            <div class="status-stack">
+              <UBadge
+                :color="getStatusColor(detail.job.status) as any"
+                variant="subtle"
+              >
+                {{ getStatusLabel(detail.job.status) }}
+              </UBadge>
+              <span class="subtle">{{ formatDate(detail.job.completed_at) }}</span>
+            </div>
           </div>
 
-          <div class="stats">
+          <div class="stats stats--dense">
             <div class="stat">
               <span>总检查项</span><strong>{{ detail.checklist.total }}</strong>
+            </div>
+            <div class="stat">
+              <span>通过</span><strong>{{ detail.checklist.passed }}</strong>
             </div>
             <div class="stat">
               <span>预警</span><strong>{{ detail.checklist.warnings }}</strong>
             </div>
             <div class="stat">
-              <span>缺失/失败</span
-              ><strong>{{
-                detail.checklist.failed + detail.checklist.missing
-              }}</strong>
+              <span>失败</span><strong>{{ detail.checklist.failed }}</strong>
+            </div>
+            <div class="stat">
+              <span>缺失</span><strong>{{ detail.checklist.missing }}</strong>
+            </div>
+            <div class="stat">
+              <span>高风险</span><strong>{{ detail.checklist.high_risk }}</strong>
             </div>
           </div>
 
-          <div class="dual">
-            <div class="panel">
-              <div class="card-head">
-                <h3>风险与改写建议</h3>
-                <span>{{ detail.findings.length }} 项</span>
-              </div>
-              <div v-if="detail.findings.length" class="stack">
-                <article
-                  v-for="finding in detail.findings"
-                  :key="finding.id"
-                  class="list-card"
-                >
-                  <div class="card-head">
-                    <div>
-                      <p class="title">{{ finding.title }}</p>
-                      <p class="subtle">
-                        {{ finding.clause_path || "未定位条款" }}
-                      </p>
+          <div class="panel">
+            <div class="card-head">
+              <h3>逐项审查结果</h3>
+              <span>{{ detail.findings.length }} 项</span>
+            </div>
+            <div v-if="detail.findings.length" class="stack">
+              <article
+                v-for="finding in detail.findings"
+                :key="finding.id"
+                class="list-card"
+              >
+                <div class="card-head">
+                  <div class="stack-tight">
+                    <div class="badge-row">
+                      <UBadge color="neutral" variant="subtle" size="xs">
+                        原始风险：{{ finding.checklist_item.risk_level || "未标注" }}
+                      </UBadge>
+                      <UBadge
+                        :color="getFindingColor(finding.status, finding.severity) as any"
+                        variant="subtle"
+                        size="xs"
+                      >
+                        {{ getFindingStatusLabel(finding.status) }} / {{ finding.severity }}
+                      </UBadge>
                     </div>
-                    <UBadge
-                      :color="
-                        getFindingColor(finding.status, finding.severity) as any
-                      "
-                      variant="subtle"
-                      size="sm"
-                    >
-                      {{ finding.severity }} / {{ finding.status }}
-                    </UBadge>
+                    <p class="title">{{ finding.checklist_item.title || finding.title }}</p>
+                    <p class="subtle">{{ finding.checklist_item.description }}</p>
                   </div>
-                  <p class="subtle">{{ finding.issue }}</p>
-                  <p v-if="finding.evidence" class="evidence">
-                    {{ finding.evidence }}
-                  </p>
-                  <div v-if="finding.rewrite_suggestion" class="rewrite">
-                    {{ finding.rewrite_suggestion }}
-                  </div>
-                </article>
-              </div>
-              <div v-else class="empty">任务尚未生成风险项。</div>
-            </div>
+                </div>
 
-            <div class="panel">
-              <div class="card-head">
-                <h3>条款预览</h3>
-                <span>{{ detail.clauses.length }} 段</span>
-              </div>
-              <div v-if="detail.clauses.length" class="stack">
-                <article
-                  v-for="clause in detail.clauses"
-                  :key="clause.id"
-                  class="list-card"
+                <div class="finding-section">
+                  <span class="section-label">问题说明</span>
+                  <p class="subtle">{{ finding.issue }}</p>
+                </div>
+
+                <div
+                  v-if="finding.evidence_items.length"
+                  class="finding-section evidence-list"
                 >
-                  <div class="card-head">
-                    <strong>{{ clause.clause_path }}</strong>
-                    <span class="subtle"
-                      >第 {{ clause.page_start }} -
-                      {{ clause.page_end }} 页</span
-                    >
+                  <span class="section-label">证据定位</span>
+                  <article
+                    v-for="(evidence, index) in finding.evidence_items"
+                    :key="`${finding.id}-${index}`"
+                    class="evidence-card"
+                  >
+                    <div class="card-head">
+                      <strong>{{ evidence.clause_path || "未定位条款" }}</strong>
+                      <span class="subtle">
+                        {{
+                          evidence.page_start && evidence.page_end
+                            ? `第 ${evidence.page_start}-${evidence.page_end} 页`
+                            : "页码未知"
+                        }}
+                      </span>
+                    </div>
+                    <p class="title">{{ evidence.clause_title }}</p>
+                    <p class="subtle">{{ evidence.excerpt }}</p>
+                  </article>
+                </div>
+
+                <div v-if="finding.rewrite_suggestion" class="rewrite">
+                  <span class="section-label">修改建议</span>
+                  <p>{{ finding.rewrite_suggestion }}</p>
+                </div>
+
+                <div
+                  v-if="
+                    finding.checklist_item.related_clauses?.length ||
+                    finding.checklist_item.related_knowledge_points?.length
+                  "
+                  class="meta-grid"
+                >
+                  <div v-if="finding.checklist_item.related_clauses?.length" class="meta-box">
+                    <span class="section-label">清单相关条款</span>
+                    <p class="subtle">
+                      {{ finding.checklist_item.related_clauses.join("、") }}
+                    </p>
                   </div>
-                  <p class="title">{{ clause.title }}</p>
-                  <p class="subtle prewrap">{{ clause.content }}</p>
-                </article>
-              </div>
-              <div v-else class="empty">还没有可展示的条款内容。</div>
+                  <div
+                    v-if="finding.checklist_item.related_knowledge_points?.length"
+                    class="meta-box"
+                  >
+                    <span class="section-label">清单相关知识点</span>
+                    <p class="subtle">
+                      {{
+                        finding.checklist_item.related_knowledge_points.join("；")
+                      }}
+                    </p>
+                  </div>
+                </div>
+              </article>
             </div>
+            <div v-else class="empty">任务尚未生成逐项结果。</div>
           </div>
 
-          <div class="future">
-            <div class="list-card">多版本对比：即将支持</div>
-            <div class="list-card">角色化审查：即将支持</div>
-            <div class="list-card">法条与案例联动：即将支持</div>
+          <div class="panel">
+            <div class="card-head">
+              <h3>条款预览</h3>
+              <span>{{ detail.clauses.length }} 段</span>
+            </div>
+            <div v-if="detail.clauses.length" class="stack">
+              <article
+                v-for="clause in detail.clauses"
+                :key="clause.id"
+                class="list-card"
+              >
+                <div class="card-head">
+                  <strong>{{ clause.clause_path }}</strong>
+                  <span class="subtle"
+                    >第 {{ clause.page_start }} - {{ clause.page_end }} 页</span
+                  >
+                </div>
+                <p class="title">{{ clause.title }}</p>
+                <p class="subtle prewrap">{{ clause.content }}</p>
+              </article>
+            </div>
+            <div v-else class="empty">还没有可展示的条款内容。</div>
           </div>
         </div>
       </UCard>
@@ -452,6 +657,7 @@ onBeforeUnmount(() => {
                   <p v-if="isJobProcessing(job.status)" class="subtle">
                     正在处理中
                   </p>
+                  <p v-else class="subtle">{{ formatDate(job.completed_at) }}</p>
                 </div>
                 <UBadge
                   :color="getStatusColor(job.status) as any"
@@ -479,90 +685,202 @@ onBeforeUnmount(() => {
       </UCard>
     </section>
 
-    <section v-else-if="activeTab === 'template-upload'">
-      <UCard class="card">
+    <section
+      v-else-if="activeTab === 'template-upload'"
+      class="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]"
+    >
+      <UCard
+        class="rounded-[28px] ring-1 ring-[#ebe5da] shadow-[0_20px_60px_rgba(34,24,12,0.05)]"
+      >
         <template #header>
-          <div class="card-head">
+          <div class="flex items-center justify-between gap-3">
             <div>
-              <p class="eyebrow">Library</p>
-              <h2>上传审查清单</h2>
+              <h2 class="text-base font-semibold text-zinc-900">上传审查清单</h2>
+              <p class="mt-1 text-sm text-zinc-500">
+                仅支持 Excel 清单（.xlsx），可选择多个文件批量入库。
+              </p>
             </div>
+            <UBadge color="neutral" variant="subtle" size="sm">XLSX</UBadge>
           </div>
         </template>
 
-        <div class="stack">
-          <label class="dropzone">
+        <div class="space-y-4">
+          <label
+            class="block rounded-[24px] border-2 border-dashed border-zinc-200 px-6 py-12 text-center transition-colors hover:border-zinc-400 hover:bg-zinc-50/50"
+            @dragover.prevent
+            @drop.prevent="onTemplateDrop"
+          >
             <input
               type="file"
-              :accept="acceptedFormats"
+              :accept="templateAcceptedFormats"
+              multiple
               class="hidden"
               @change="onTemplateFileChange"
             />
             <UIcon
-              name="i-lucide-library-big"
-              class="h-10 w-10 text-[#3158ff]"
+              name="i-lucide-upload-cloud"
+              class="mx-auto mb-4 h-10 w-10 text-zinc-400"
             />
-            <div>
-              <p class="title">上传审查清单文件</p>
-              <p class="subtle">仅需填写清单名称，可选补充清单说明。</p>
-            </div>
+            <p class="text-base font-medium text-zinc-900">
+              点击或拖拽 Excel 清单到此处
+            </p>
+            <p class="mt-2 text-sm text-zinc-500">支持 `.xlsx` 文件</p>
           </label>
 
-          <div v-if="templateFile" class="pill">
-            <div>
-              <p class="title">{{ templateFile.name }}</p>
-              <p class="subtle">{{ formatFileSize(templateFile.size) }}</p>
-            </div>
-            <UButton
-              icon="i-lucide-x"
-              color="neutral"
-              variant="ghost"
-              size="xs"
-              @click="templateFile = null"
-            />
-          </div>
-
-          <div class="fields">
-            <div class="field">
-              <label>清单名称</label>
-              <UInput
-                v-model="templateForm.name"
-                placeholder="请输入清单名称"
-              />
-            </div>
-          </div>
-
-          <div class="field">
-            <label>清单说明（可选）</label>
-            <UTextarea
-              v-model="templateForm.description"
-              :rows="4"
-              placeholder="可补充清单用途、适用场景等"
-            />
-          </div>
-
-          <div class="actions">
+          <div class="flex items-center justify-end gap-3 pt-2">
+            <UBadge color="neutral" variant="subtle" size="sm">
+              待上传 {{ templateFiles.length }} 个
+            </UBadge>
             <UButton
               color="neutral"
               variant="ghost"
-              :loading="isLoadingTemplates"
-              @click="store.fetchTemplates()"
-              >刷新列表</UButton
+              :disabled="isUploadingTemplate"
+              @click="clearTemplateDraft"
             >
-            <UButton
-              color="primary"
-              :disabled="!templateFile || !templateForm.name.trim()"
-              :loading="isUploadingTemplate"
-              @click="submitTemplate"
-            >
-              上传审查清单
+              清空
             </UButton>
           </div>
         </div>
       </UCard>
+
+      <UCard
+        class="rounded-[28px] ring-1 ring-[#ebe5da] shadow-[0_20px_60px_rgba(34,24,12,0.05)]"
+      >
+        <template #header>
+          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 class="text-base font-semibold text-zinc-900">上传管理</h2>
+              <p class="mt-1 text-sm text-zinc-500">
+                勾选后再上传或删除，系统会自动解析 Excel 中的风险块。
+              </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                :disabled="!stagedTemplateRows.length || allUploadSelected"
+                @click="selectAllUploadFiles"
+              >
+                全选
+              </UButton>
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                :disabled="!hasUploadSelection"
+                @click="clearSelectedUploadFiles"
+              >
+                取消全选
+              </UButton>
+              <UButton
+                color="primary"
+                size="sm"
+                :disabled="!hasUploadSelection"
+                :loading="isUploadingTemplate"
+                @click="submitTemplate"
+              >
+                上传
+              </UButton>
+              <UButton
+                color="error"
+                variant="soft"
+                size="sm"
+                :disabled="!hasUploadSelection"
+                @click="deleteSelectedUploadFiles"
+              >
+                删除
+              </UButton>
+            </div>
+          </div>
+        </template>
+
+        <div
+          v-if="!stagedTemplateRows.length"
+          class="rounded-[24px] border border-dashed border-zinc-200 bg-zinc-50/80 px-6 py-12 text-center"
+        >
+          <UIcon
+            name="i-lucide-library-big"
+            class="mx-auto mb-3 h-10 w-10 text-zinc-300"
+          />
+          <p class="text-base font-medium text-zinc-900">暂无待上传文件</p>
+          <p class="mt-2 text-sm text-zinc-500">
+            先在左侧拖拽或选择文件，这里会显示待上传列表。
+          </p>
+        </div>
+
+        <div v-else class="space-y-3">
+          <article
+            v-for="item in stagedTemplateRows"
+            :key="item.key"
+            class="rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex min-w-0 items-start gap-3">
+                <UCheckbox
+                  :model-value="selectedUploadRows[item.key] === true"
+                  @update:model-value="
+                    ($event) => toggleUploadSelection(item.key, !!$event)
+                  "
+                />
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-semibold text-zinc-900">
+                    {{ item.file.name }}
+                  </p>
+                  <p class="mt-1 text-xs text-zinc-500">
+                    {{ formatFileSize(item.file.size) }}
+                  </p>
+                </div>
+              </div>
+              <UButton
+                icon="i-lucide-trash-2"
+                color="error"
+                variant="ghost"
+                size="xs"
+                @click="removeTemplateFile(item.file)"
+              />
+            </div>
+          </article>
+        </div>
+      </UCard>
     </section>
 
-    <section v-else-if="activeTab === 'template-list'">
+    <section v-else-if="activeTab === 'template-list'" class="stack">
+      <UCard class="card">
+        <template #header>
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">Global Rule</p>
+              <h2>全局规则</h2>
+            </div>
+            <UBadge color="neutral" variant="subtle" size="sm">
+              {{ isLoadingSettings ? "加载中" : "模块级共享" }}
+            </UBadge>
+          </div>
+        </template>
+
+        <div class="stack">
+          <p class="subtle">
+            这里的规则会对所有合同审查任务生效，并和所选清单一起注入 AI 提示词。
+          </p>
+          <textarea
+            v-model="globalRuleDraft"
+            class="rule-textarea"
+            placeholder="例如：对于 fail / warn 项，优先指出风险后果，并给出可落地的改写建议。"
+          />
+          <div class="actions">
+            <span class="subtle">当前字数：{{ globalRuleDraft.length }}</span>
+            <UButton
+              color="primary"
+              :loading="isSavingSettings"
+              @click="submitGlobalRule"
+            >
+              保存全局规则
+            </UButton>
+          </div>
+        </div>
+      </UCard>
+
       <UCard class="card">
         <template #header>
           <div class="card-head">
@@ -570,6 +888,13 @@ onBeforeUnmount(() => {
               <p class="eyebrow">Catalog</p>
               <h2>审查清单列表</h2>
             </div>
+            <UButton
+              icon="i-lucide-refresh-cw"
+              color="neutral"
+              variant="ghost"
+              :loading="isLoadingTemplates"
+              @click="store.fetchTemplates()"
+            />
           </div>
         </template>
 
@@ -603,9 +928,18 @@ onBeforeUnmount(() => {
                 />
               </div>
             </div>
-            <p class="subtle">
-              {{ item.description || "当前清单已绑定默认审查配置。" }}
-            </p>
+            <div class="meta-grid">
+              <div class="meta-box">
+                <span class="section-label">说明</span>
+                <p class="subtle">
+                  {{ item.description || "当前清单已解析为 Excel 审查模板。" }}
+                </p>
+              </div>
+              <div class="meta-box">
+                <span class="section-label">检查项</span>
+                <p class="subtle">{{ getTemplateChecklistCount(item) }} 项</p>
+              </div>
+            </div>
           </article>
         </div>
       </UCard>
@@ -639,7 +973,8 @@ onBeforeUnmount(() => {
 .pill,
 .panel,
 .stat,
-.tabs {
+.tabs,
+.rule-banner {
   border: 1px solid #e8dfd0;
   background: rgba(255, 255, 255, 0.84);
   box-shadow: 0 20px 48px rgba(34, 24, 12, 0.06);
@@ -695,12 +1030,13 @@ strong {
 }
 .stats,
 .fields,
-.future,
-.dual,
-.grid-layout,
+.meta-grid,
 .result-layout {
   display: grid;
   gap: 14px;
+}
+.stats--dense {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 .stat {
   border-radius: 22px;
@@ -758,20 +1094,31 @@ strong {
 }
 .card-head,
 .actions,
-.overview {
+.overview,
+.badge-row,
+.status-stack {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
+.status-stack {
+  flex-direction: column;
+  align-items: flex-end;
+}
 .stack {
   display: grid;
   gap: 14px;
 }
+.stack-tight {
+  display: grid;
+  gap: 8px;
+}
 .dropzone,
 .pill,
 .list-card,
-.panel {
+.panel,
+.rule-banner {
   border-radius: 24px;
   padding: 16px;
 }
@@ -784,7 +1131,8 @@ strong {
 }
 .pill,
 .list-card,
-.panel {
+.panel,
+.rule-banner {
   background: rgba(255, 255, 255, 0.88);
 }
 .list-card {
@@ -821,7 +1169,8 @@ strong {
   display: grid;
   gap: 8px;
 }
-.field label {
+.field label,
+.section-label {
   font-size: 0.84rem;
   font-weight: 600;
   color: #433f39;
@@ -834,16 +1183,23 @@ strong {
   background: rgba(255, 250, 244, 0.75);
   line-height: 1.8;
 }
-.evidence,
-.rewrite {
-  margin-top: 10px;
+.finding-section {
+  display: grid;
+  gap: 8px;
+}
+.evidence-list {
+  gap: 10px;
+}
+.evidence-card,
+.meta-box {
   border-radius: 18px;
   padding: 12px 14px;
-}
-.evidence {
   background: #fbf6ed;
 }
 .rewrite {
+  margin-top: 4px;
+  border-radius: 18px;
+  padding: 12px 14px;
   background: rgba(49, 88, 255, 0.06);
   color: #2f4fb9;
   line-height: 1.7;
@@ -853,26 +1209,39 @@ strong {
   max-height: 160px;
   overflow: auto;
 }
+.rule-textarea {
+  min-height: 160px;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #d9cfbd;
+  border-radius: 22px;
+  padding: 16px;
+  background: rgba(255, 252, 247, 0.86);
+  color: #433f39;
+  outline: none;
+}
+.rule-textarea:focus {
+  border-color: #3158ff;
+  box-shadow: 0 0 0 3px rgba(49, 88, 255, 0.12);
+}
+.error-text {
+  color: #bb3d3d;
+  line-height: 1.7;
+}
 @media (min-width: 960px) {
   .hero {
     grid-template-columns: minmax(0, 1.5fr) 320px;
     align-items: start;
   }
-  .stats,
-  .future {
+  .stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  .fields {
+  .fields,
+  .meta-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .grid-layout {
-    grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
   }
   .result-layout {
     grid-template-columns: minmax(0, 1.3fr) 320px;
-  }
-  .dual {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>
