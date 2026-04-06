@@ -14,10 +14,12 @@ from app.models import (
 from app.services.contract_review.analysis import analyze_contract
 from app.services.contract_review.clause_parser import parse_clauses
 from app.services.contract_review.report import build_review_report
+from app.services.contract_review.review_analyzer import ContractReviewLLMAnalyzer
 from app.services.contract_review.storage import ContractReviewStorage
 from app.services.loaders import registry
 
 logger = logging.getLogger(__name__)
+GLOBAL_RULE_SETTING_KEY = "global_rule_prompt"
 
 
 def utcnow() -> datetime:
@@ -52,12 +54,25 @@ class ContractReviewProcessor:
             file_path = self.storage.resolve_relative_path(job.storage_path)
             load_result = registry.load_document(file_path)
             parsed_clauses = parse_clauses(load_result.fragments)
-            findings, summary, overview = analyze_contract(
-                clauses=parsed_clauses,
-                config=job.template.config_json,
-                review_name=job.review_name,
-                original_filename=job.original_filename,
-            )
+            template_mode = str(job.template.config_json.get("template_mode", "legacy"))
+            if template_mode == "xlsx_checklist":
+                global_rule_prompt = self._get_global_rule_prompt()
+                findings, summary, overview = ContractReviewLLMAnalyzer(
+                    self.settings
+                ).analyze(
+                    clauses=parsed_clauses,
+                    config=job.template.config_json,
+                    global_rule_prompt=global_rule_prompt,
+                    review_name=job.review_name,
+                    original_filename=job.original_filename,
+                )
+            else:
+                findings, summary, overview = analyze_contract(
+                    clauses=parsed_clauses,
+                    config=job.template.config_json,
+                    review_name=job.review_name,
+                    original_filename=job.original_filename,
+                )
 
             for finding in list(job.findings):
                 self.db.delete(finding)
@@ -114,6 +129,7 @@ class ContractReviewProcessor:
                 "overview": overview,
                 "template_name": job.template.name,
                 "template_profile": job.template.config_json.get("profile", "general"),
+                "template_mode": template_mode,
                 "export_path": export_location,
                 "extensions": {
                     "compare_versions": {"enabled": False, "label": "即将支持"},
@@ -125,6 +141,7 @@ class ContractReviewProcessor:
                 **job.metadata_json,
                 "loader_name": load_result.loader_name,
                 "raw_doc_count": len(load_result.fragments),
+                "review_engine": "llm" if template_mode == "xlsx_checklist" else "rule",
             }
             self.db.commit()
 
@@ -167,3 +184,15 @@ class ContractReviewProcessor:
             failed_job.completed_at = utcnow()
             failed_job.updated_at = utcnow()
             self.db.commit()
+
+    def _get_global_rule_prompt(self) -> str:
+        from app.models import ContractReviewSetting
+
+        setting = self.db.scalar(
+            select(ContractReviewSetting).where(
+                ContractReviewSetting.key == GLOBAL_RULE_SETTING_KEY
+            )
+        )
+        if setting is None or not setting.value_text:
+            return ""
+        return setting.value_text

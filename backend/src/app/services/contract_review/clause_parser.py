@@ -79,11 +79,18 @@ def parse_clauses(fragments: list[LoadedFragment]) -> list[ParsedClause]:
     clause_index = 0
 
     def flush() -> None:
-        nonlocal current_title, current_lines, current_page_start, current_page_end, clause_index
+        nonlocal \
+            current_title, \
+            current_lines, \
+            current_page_start, \
+            current_page_end, \
+            clause_index
         content = "\n".join(line for line in current_lines if line.strip()).strip()
         if not content:
             return
-        title = current_title or (content.splitlines()[0][:40] or f"条款 {clause_index + 1}")
+        title = current_title or (
+            content.splitlines()[0][:40] or f"条款 {clause_index + 1}"
+        )
         clauses.append(
             ParsedClause(
                 clause_path=f"C{clause_index + 1:03d}",

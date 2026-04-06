@@ -36,6 +36,14 @@ class ReviewTemplateOperationResponse(ReviewTemplateListResponse):
     affected_ids: list[str] = Field(default_factory=list)
 
 
+class ReviewSettingsResponse(BaseModel):
+    global_rule_prompt: str = ""
+
+
+class ReviewSettingsUpdateRequest(BaseModel):
+    global_rule_prompt: str = ""
+
+
 class ReviewJobItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -97,6 +105,8 @@ class ReviewFindingItem(BaseModel):
     clause_path: str | None = None
     page_start: int | None = None
     page_end: int | None = None
+    checklist_item: dict[str, Any] = Field(default_factory=dict)
+    evidence_items: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ReviewChecklistSummary(BaseModel):

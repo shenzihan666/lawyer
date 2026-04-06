@@ -11,6 +11,7 @@ from .contract_review import (
     ContractReviewFindingStatus as ContractReviewFindingStatus,
     ContractReviewJob as ContractReviewJob,
     ContractReviewJobStatus as ContractReviewJobStatus,
+    ContractReviewSetting as ContractReviewSetting,
     ContractReviewTemplate as ContractReviewTemplate,
     ContractReviewTemplateSource as ContractReviewTemplateSource,
 )

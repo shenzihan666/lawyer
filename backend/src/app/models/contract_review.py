@@ -71,6 +71,19 @@ class ContractReviewTemplate(Base):
     jobs: Mapped[list["ContractReviewJob"]] = relationship(back_populates="template")
 
 
+class ContractReviewSetting(Base):
+    __tablename__ = "contract_review_settings"
+
+    key: Mapped[str] = mapped_column(String(120), primary_key=True)
+    value_text: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class ContractReviewJob(Base):
     __tablename__ = "contract_review_jobs"
 
@@ -176,4 +189,6 @@ class ContractReviewFinding(Base):
     )
 
     job: Mapped[ContractReviewJob] = relationship(back_populates="findings")
-    clause: Mapped[ContractReviewClause | None] = relationship(back_populates="findings")
+    clause: Mapped[ContractReviewClause | None] = relationship(
+        back_populates="findings"
+    )

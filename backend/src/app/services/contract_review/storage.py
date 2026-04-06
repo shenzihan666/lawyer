@@ -83,7 +83,9 @@ class ContractReviewStorage:
 
     def build_export_path(self, review_id: str) -> Path:
         dated_dir = datetime.now().strftime("%Y/%m")
-        target_dir = self.settings.upload_root / "review-exports" / dated_dir / review_id
+        target_dir = (
+            self.settings.upload_root / "review-exports" / dated_dir / review_id
+        )
         target_dir.mkdir(parents=True, exist_ok=True)
         return target_dir / "report.docx"
 

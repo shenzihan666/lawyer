@@ -7,6 +7,8 @@ from app.schemas.contract_review import (
     ReviewJobDetailResponse,
     ReviewJobListResponse,
     ReviewJobOperationResponse,
+    ReviewSettingsResponse,
+    ReviewSettingsUpdateRequest,
     ReviewTemplateListResponse,
     ReviewTemplateOperationResponse,
 )
@@ -29,6 +31,21 @@ def list_templates(
     return service.list_templates()
 
 
+@router.get("/settings", response_model=ReviewSettingsResponse)
+def get_settings(
+    service: ContractReviewService = Depends(get_contract_review_service),
+) -> ReviewSettingsResponse:
+    return service.get_settings()
+
+
+@router.patch("/settings", response_model=ReviewSettingsResponse)
+def update_settings(
+    payload: ReviewSettingsUpdateRequest,
+    service: ContractReviewService = Depends(get_contract_review_service),
+) -> ReviewSettingsResponse:
+    return service.update_settings(global_rule_prompt=payload.global_rule_prompt)
+
+
 @router.post("/templates/upload", response_model=ReviewTemplateOperationResponse)
 def upload_template(
     file: UploadFile = File(...),
@@ -49,7 +66,9 @@ def upload_template(
     )
 
 
-@router.delete("/templates/{template_id}", response_model=ReviewTemplateOperationResponse)
+@router.delete(
+    "/templates/{template_id}", response_model=ReviewTemplateOperationResponse
+)
 def delete_template(
     template_id: str,
     service: ContractReviewService = Depends(get_contract_review_service),
@@ -71,7 +90,9 @@ def create_job(
     review_name: str | None = Form(None),
     service: ContractReviewService = Depends(get_contract_review_service),
 ) -> ReviewJobDetailResponse:
-    return service.create_job(file=file, template_id=template_id, review_name=review_name)
+    return service.create_job(
+        file=file, template_id=template_id, review_name=review_name
+    )
 
 
 @router.get("/jobs/{job_id}", response_model=ReviewJobDetailResponse)

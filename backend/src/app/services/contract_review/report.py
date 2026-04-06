@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pathlib import Path
 
 from docx import Document
@@ -32,7 +34,7 @@ def build_review_report(
     for highlight in overview.get("highlights", []):
         document.add_paragraph(str(highlight), style="List Bullet")
 
-    document.add_heading("二、审查清单", level=1)
+    document.add_heading("二、审查清单汇总", level=1)
     checklist = job.summary_json
     table = document.add_table(rows=1, cols=4)
     header = table.rows[0].cells
@@ -46,25 +48,43 @@ def build_review_report(
     row[2].text = str(checklist.get("warnings", 0))
     row[3].text = str(checklist.get("missing", 0) + checklist.get("failed", 0))
 
-    document.add_heading("三、风险与改写建议", level=1)
+    document.add_heading("三、逐项审查结果", level=1)
     if findings:
         for index, finding in enumerate(findings, start=1):
+            metadata = dict(finding.metadata_json or {})
+            checklist_item = metadata.get("checklist_item") or {}
+            evidence_items = metadata.get("evidence_items") or []
+
             paragraph = document.add_paragraph()
             paragraph.add_run(
                 f"{index}. [{finding.severity.upper()} / {finding.status}] {finding.title}"
             ).bold = True
-            document.add_paragraph(f"问题：{finding.issue}")
-            if finding.evidence:
-                document.add_paragraph(f"证据：{finding.evidence}")
+            if checklist_item.get("risk_level"):
+                document.add_paragraph(f"原始风险等级：{checklist_item['risk_level']}")
+            document.add_paragraph(f"问题说明：{finding.issue}")
+            if checklist_item.get("description"):
+                document.add_paragraph(f"清单要求：{checklist_item['description']}")
+            if evidence_items:
+                document.add_paragraph("证据定位：")
+                for evidence in evidence_items:
+                    document.add_paragraph(
+                        f"{evidence.get('clause_path', '未定位')} "
+                        f"{evidence.get('clause_title', '')} - "
+                        f"{evidence.get('excerpt', '')}",
+                        style="List Bullet",
+                    )
+            elif finding.evidence:
+                document.add_paragraph(f"证据摘录：{finding.evidence}")
             if finding.rewrite_suggestion:
-                document.add_paragraph(f"建议改写：{finding.rewrite_suggestion}")
+                document.add_paragraph(f"修改建议：{finding.rewrite_suggestion}")
     else:
-        document.add_paragraph("当前任务尚未生成风险项。")
+        document.add_paragraph("当前任务尚未生成审查结果。")
 
     document.add_heading("四、条款预览", level=1)
     for clause in clauses[:12]:
         document.add_heading(
-            f"{clause.clause_path} {clause.title}（第 {clause.page_start} 页）", level=2
+            f"{clause.clause_path} {clause.title}（第 {clause.page_start} 页）",
+            level=2,
         )
         document.add_paragraph(clause.content[:800])
 

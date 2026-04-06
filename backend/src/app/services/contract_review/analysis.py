@@ -4,6 +4,10 @@ from typing import Any
 from app.services.contract_review.clause_parser import ParsedClause
 
 
+VALID_FINDING_STATUSES = {"pass", "warn", "fail", "missing"}
+VALID_FINDING_SEVERITIES = {"low", "medium", "high"}
+
+
 @dataclass(slots=True)
 class AnalysisFinding:
     checklist_key: str
@@ -17,7 +21,9 @@ class AnalysisFinding:
     metadata: dict[str, Any]
 
 
-def _match_clause(clauses: list[ParsedClause], keywords: list[str]) -> tuple[int | None, ParsedClause | None]:
+def _match_clause(
+    clauses: list[ParsedClause], keywords: list[str]
+) -> tuple[int | None, ParsedClause | None]:
     best_score = 0
     best_index: int | None = None
     best_clause: ParsedClause | None = None
@@ -40,23 +46,13 @@ def analyze_contract(
 ) -> tuple[list[AnalysisFinding], dict[str, int], dict[str, Any]]:
     checklist_items = config.get("checklist", [])
     findings: list[AnalysisFinding] = []
-    summary = {
-        "total": len(checklist_items),
-        "passed": 0,
-        "warnings": 0,
-        "failed": 0,
-        "missing": 0,
-        "high_risk": 0,
-        "medium_risk": 0,
-        "low_risk": 0,
-    }
 
     for item in checklist_items:
         keywords = [str(keyword) for keyword in item.get("keywords", [])]
         clause_index, clause = _match_clause(clauses, keywords)
         rewrite_hint = item.get("rewrite_hint")
         if clause is None:
-            severity = str(item.get("missing_severity", "medium"))
+            severity = normalize_severity(item.get("missing_severity"))
             findings.append(
                 AnalysisFinding(
                     checklist_key=str(item.get("key", "")),
@@ -67,19 +63,22 @@ def analyze_contract(
                     evidence=None,
                     rewrite_suggestion=str(rewrite_hint) if rewrite_hint else None,
                     clause_index=None,
-                    metadata={"description": item.get("description"), "matched_keywords": []},
+                    metadata={
+                        "description": item.get("description"),
+                        "matched_keywords": [],
+                    },
                 )
             )
-            summary["missing"] += 1
-            summary[f"{severity}_risk"] += 1
             continue
 
         haystack = f"{clause.title}\n{clause.content}"
         triggered_flags = [
-            flag for flag in item.get("red_flags", []) if str(flag).lower() in haystack.lower()
+            flag
+            for flag in item.get("red_flags", [])
+            if str(flag).lower() in haystack.lower()
         ]
         if triggered_flags:
-            severity = str(item.get("risk_severity", "medium"))
+            severity = normalize_severity(item.get("risk_severity"))
             status = "fail" if severity == "high" else "warn"
             issue = (
                 f"条款中出现了需要重点核查的表述：{', '.join(triggered_flags[:3])}。"
@@ -115,26 +114,78 @@ def analyze_contract(
             )
         )
 
+    summary = build_checklist_summary(findings, total_items=len(checklist_items))
+    overview = build_review_overview(
+        config=config,
+        review_name=review_name,
+        original_filename=original_filename,
+        clause_count=len(clauses),
+        summary=summary,
+    )
+    return findings, summary, overview
+
+
+def build_checklist_summary(
+    findings: list[AnalysisFinding],
+    *,
+    total_items: int | None = None,
+) -> dict[str, int]:
+    summary = {
+        "total": total_items if total_items is not None else len(findings),
+        "passed": 0,
+        "warnings": 0,
+        "failed": 0,
+        "missing": 0,
+        "high_risk": 0,
+        "medium_risk": 0,
+        "low_risk": 0,
+    }
+    for finding in findings:
+        severity = normalize_severity(finding.severity)
+        status = normalize_status(finding.status)
+        summary[f"{severity}_risk"] += 1
         if status == "pass":
             summary["passed"] += 1
-            summary["low_risk"] += 1
         elif status == "warn":
             summary["warnings"] += 1
-            summary[f"{severity}_risk"] += 1
-        else:
+        elif status == "fail":
             summary["failed"] += 1
-            summary[f"{severity}_risk"] += 1
+        else:
+            summary["missing"] += 1
+    return summary
 
-    overview = {
+
+def build_review_overview(
+    *,
+    config: dict[str, Any],
+    review_name: str,
+    original_filename: str,
+    clause_count: int,
+    summary: dict[str, int],
+) -> dict[str, Any]:
+    return {
         "title": config.get("report_title", "合同审查报告"),
         "review_name": review_name,
         "original_filename": original_filename,
         "contract_type": config.get("profile", "general"),
-        "clause_count": len(clauses),
+        "clause_count": clause_count,
         "highlights": [
-            f"共识别 {len(clauses)} 个条款片段",
+            f"共识别 {clause_count} 个条款片段",
             f"检查清单覆盖 {summary['total']} 项",
             f"高风险/中风险提示共 {summary['high_risk'] + summary['medium_risk']} 项",
         ],
     }
-    return findings, summary, overview
+
+
+def normalize_status(value: object) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in VALID_FINDING_STATUSES:
+        return normalized
+    return "missing"
+
+
+def normalize_severity(value: object) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in VALID_FINDING_SEVERITIES:
+        return normalized
+    return "medium"
