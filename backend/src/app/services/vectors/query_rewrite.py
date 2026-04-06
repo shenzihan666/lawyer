@@ -73,10 +73,10 @@ class QueryRewriteService:
                 "当前召回片段如下：\n"
                 f"{self._format_docs(docs)}\n\n"
                 "请返回 JSON，字段如下：\n"
-                '{'
+                "{"
                 '"binary_score":"yes 或 no",'
                 '"reason":"一句中文理由"'
-                '}'
+                "}"
             ),
         )
         score = str(response.get("binary_score", "")).strip().lower()
@@ -128,7 +128,8 @@ class QueryRewriteService:
 
         return RewritePlan(
             strategy=strategy,
-            reason=str(response.get("reason", "")).strip() or "model_returned_no_reason",
+            reason=str(response.get("reason", "")).strip()
+            or "model_returned_no_reason",
             step_back_question=str(response.get("step_back_question", "")).strip(),
             step_back_query=str(response.get("step_back_query", "")).strip(),
             hypothetical_answer=str(response.get("hypothetical_answer", "")).strip(),
@@ -168,7 +169,9 @@ class QueryRewriteService:
                 f"Query rewrite API returned HTTP {exc.code}: {detail}"
             ) from exc
         except error.URLError as exc:
-            raise RuntimeError(f"Query rewrite API request failed: {exc.reason}") from exc
+            raise RuntimeError(
+                f"Query rewrite API request failed: {exc.reason}"
+            ) from exc
 
         return self._parse_chat_completion_response(body)
 

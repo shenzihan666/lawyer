@@ -214,9 +214,7 @@ class DocumentRerankService:
             item = dict(docs[index])
             metadata = dict(item.get("metadata", {}))
             original_score = float(item.get("score", 0.0))
-            rerank_score = float(
-                ranked_scores.get(index, max(len(docs) - rank, 0))
-            )
+            rerank_score = float(ranked_scores.get(index, max(len(docs) - rank, 0)))
             metadata["retrieval_score"] = original_score
             metadata["rerank_score"] = rerank_score
             metadata["rerank_rank"] = rank
@@ -245,8 +243,7 @@ class DocumentRerankService:
 
     def _llm_model(self) -> str | None:
         return (
-            self.settings.answer_generation_model
-            or self.settings.query_rewrite_model
+            self.settings.answer_generation_model or self.settings.query_rewrite_model
         )
 
     def _llm_api_key(self) -> str | None:
@@ -351,6 +348,6 @@ class DocumentRerankService:
             blocks.append(
                 f"[{index}] 文件: {item.get('original_filename', '')}\n"
                 f"页码: {int(item.get('page_number') or 0)}\n"
-                f"内容: {str(item.get('content', '')).strip()[:self.settings.rerank_max_content_chars]}"
+                f"内容: {str(item.get('content', '')).strip()[: self.settings.rerank_max_content_chars]}"
             )
         return "\n\n".join(blocks)

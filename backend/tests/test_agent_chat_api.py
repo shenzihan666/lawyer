@@ -16,6 +16,13 @@ class _FakeAgent:
             yield None
 
 
+def _enable_agent(monkeypatch) -> None:
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("AGENT_ENABLED", "true")
+    get_settings.cache_clear()
+
+
 def test_first_message_creates_conversation_and_schedules_ai_title(
     client, monkeypatch
 ) -> None:
@@ -24,6 +31,8 @@ def test_first_message_creates_conversation_and_schedules_ai_title(
     from app.services.agent import checkpoint as checkpoint_module
     from app.services.agent import factory as factory_module
 
+    _enable_agent(monkeypatch)
+
     async def fake_get_checkpointer():
         return object()
 
@@ -31,7 +40,9 @@ def test_first_message_creates_conversation_and_schedules_ai_title(
         assert query == QUERY
         session = get_session_factory()()
         try:
-            meta = session.query(ConversationMeta).filter_by(thread_id=thread_id).first()
+            meta = (
+                session.query(ConversationMeta).filter_by(thread_id=thread_id).first()
+            )
             assert meta is not None
             meta.title = AI_TITLE
             session.commit()
@@ -79,6 +90,8 @@ def test_existing_placeholder_conversation_schedules_ai_title_on_first_message(
     from app.services.agent import checkpoint as checkpoint_module
     from app.services.agent import factory as factory_module
 
+    _enable_agent(monkeypatch)
+
     async def fake_get_checkpointer():
         return object()
 
@@ -115,7 +128,12 @@ def test_existing_placeholder_conversation_schedules_ai_title_on_first_message(
     with client.stream(
         "POST",
         "/api/v1/agent/stream",
-        json={"query": QUERY, "thread_id": "thread-existing", "top_k": 5, "document_ids": []},
+        json={
+            "query": QUERY,
+            "thread_id": "thread-existing",
+            "top_k": 5,
+            "document_ids": [],
+        },
     ) as response:
         body = "".join(response.iter_text())
 
@@ -152,6 +170,8 @@ def test_agent_stream_passes_retrieval_settings_into_agent_factory(
     from app.api.routes import agent_chat as agent_chat_module
     from app.services.agent import checkpoint as checkpoint_module
     from app.services.agent import factory as factory_module
+
+    _enable_agent(monkeypatch)
 
     captured: dict[str, object] = {}
 

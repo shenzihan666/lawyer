@@ -51,9 +51,7 @@ def test_embed_texts_sends_multiple_requests_with_configured_batch_size(
         )
     )
 
-    embeddings = service.embed_texts(
-        ["text-0", "text-1", "text-2", "text-3", "text-4"]
-    )
+    embeddings = service.embed_texts(["text-0", "text-1", "text-2", "text-3", "text-4"])
 
     assert requested_batches == [
         ["text-0", "text-1"],
@@ -72,7 +70,11 @@ def test_embed_texts_caps_batch_size_at_provider_limit(monkeypatch) -> None:
         requested_batch_sizes.append(len(batch))
         return _FakeResponse(
             json.dumps(
-                {"data": [{"embedding": [float(index)]} for index, _ in enumerate(batch)]}
+                {
+                    "data": [
+                        {"embedding": [float(index)]} for index, _ in enumerate(batch)
+                    ]
+                }
             ).encode("utf-8")
         )
 

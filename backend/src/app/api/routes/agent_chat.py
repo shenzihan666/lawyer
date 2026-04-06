@@ -141,7 +141,7 @@ async def _generate_title(query: str) -> str:
                 },
             )
             data = resp.json()
-            title = data["choices"][0]["message"]["content"].strip().strip('"\'')
+            title = data["choices"][0]["message"]["content"].strip().strip("\"'")
             return title[:50]
     except Exception as exc:
         logger.warning("Title generation failed: %s", exc)
@@ -157,7 +157,9 @@ async def _generate_and_store_title(thread_id: str, query: str) -> None:
 
         session = get_session_factory()()
         try:
-            meta = session.query(ConversationMeta).filter_by(thread_id=thread_id).first()
+            meta = (
+                session.query(ConversationMeta).filter_by(thread_id=thread_id).first()
+            )
             if meta and meta.title == DEFAULT_CONVERSATION_TITLE:
                 meta.title = title[:255]
                 session.commit()
@@ -183,7 +185,13 @@ async def agent_chat_stream(
     settings = get_settings()
     if not settings.agent_enabled:
         return StreamingResponse(
-            iter(["data: " + json.dumps({"type": "error", "content": "Agent is disabled"}) + "\n\n"]),
+            iter(
+                [
+                    "data: "
+                    + json.dumps({"type": "error", "content": "Agent is disabled"})
+                    + "\n\n"
+                ]
+            ),
             media_type="text/event-stream",
         )
 

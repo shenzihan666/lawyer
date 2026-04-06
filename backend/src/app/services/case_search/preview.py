@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-import shutil
 import subprocess
-from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -14,7 +12,6 @@ from app.models import CaseSearchQueryAsset, DocumentAsset
 from app.schemas.document import DocumentPreviewResponse, PreviewFragmentItem
 from app.services.documents.storage import UploadStorage
 from app.services.loaders import registry
-from app.services.loaders.base import LoadResult
 
 
 class DocumentPreviewService:
@@ -30,7 +27,9 @@ class DocumentPreviewService:
             .where(DocumentAsset.id == document_id, DocumentAsset.deleted_at.is_(None))
         )
         if document is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+            )
 
         preview_url, preview_status = self._ensure_preview(
             asset_id=document.id,
@@ -44,7 +43,9 @@ class DocumentPreviewService:
         if isinstance(document.trace_metadata, dict):
             document.trace_metadata = {
                 **document.trace_metadata,
-                "preview_storage_path": preview_url["relative_path"] if preview_url else None,
+                "preview_storage_path": preview_url["relative_path"]
+                if preview_url
+                else None,
             }
             self.db.commit()
 
@@ -86,7 +87,10 @@ class DocumentPreviewService:
             select(CaseSearchQueryAsset).where(CaseSearchQueryAsset.id == asset_id)
         )
         if asset is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case search asset not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Case search asset not found",
+            )
 
         preview_meta, preview_status = self._ensure_preview(
             asset_id=asset.id,
@@ -95,7 +99,11 @@ class DocumentPreviewService:
             existing_preview_path=asset.preview_storage_path,
             preview_namespace="case-search-assets",
         )
-        asset.preview_storage_path = preview_meta["relative_path"] if preview_meta else asset.preview_storage_path
+        asset.preview_storage_path = (
+            preview_meta["relative_path"]
+            if preview_meta
+            else asset.preview_storage_path
+        )
         asset.preview_status = preview_status
         self.db.commit()
 
@@ -121,19 +129,27 @@ class DocumentPreviewService:
             meta={"extraction_status": asset.extraction_status},
         )
 
-    def resolve_document_file_path(self, document_id: str, *, preview: bool = False) -> tuple[Path, str | None, str]:
+    def resolve_document_file_path(
+        self, document_id: str, *, preview: bool = False
+    ) -> tuple[Path, str | None, str]:
         document = self.db.scalar(
-            select(DocumentAsset).where(DocumentAsset.id == document_id, DocumentAsset.deleted_at.is_(None))
+            select(DocumentAsset).where(
+                DocumentAsset.id == document_id, DocumentAsset.deleted_at.is_(None)
+            )
         )
         if document is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+            )
 
         if preview:
             preview_meta, preview_status = self._ensure_preview(
                 asset_id=document.id,
                 source_relative_path=document.storage_path,
                 source_extension=document.file_extension,
-                existing_preview_path=document.trace_metadata.get("preview_storage_path")
+                existing_preview_path=document.trace_metadata.get(
+                    "preview_storage_path"
+                )
                 if isinstance(document.trace_metadata, dict)
                 else None,
                 preview_namespace="documents",
@@ -161,9 +177,14 @@ class DocumentPreviewService:
         *,
         preview: bool = False,
     ) -> tuple[Path, str | None, str]:
-        asset = self.db.scalar(select(CaseSearchQueryAsset).where(CaseSearchQueryAsset.id == asset_id))
+        asset = self.db.scalar(
+            select(CaseSearchQueryAsset).where(CaseSearchQueryAsset.id == asset_id)
+        )
         if asset is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case search asset not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Case search asset not found",
+            )
 
         if preview:
             preview_meta, preview_status = self._ensure_preview(
@@ -173,7 +194,11 @@ class DocumentPreviewService:
                 existing_preview_path=asset.preview_storage_path,
                 preview_namespace="case-search-assets",
             )
-            asset.preview_storage_path = preview_meta["relative_path"] if preview_meta else asset.preview_storage_path
+            asset.preview_storage_path = (
+                preview_meta["relative_path"]
+                if preview_meta
+                else asset.preview_storage_path
+            )
             asset.preview_status = preview_status
             self.db.commit()
             if preview_meta is None:
@@ -269,5 +294,9 @@ class DocumentPreviewService:
             raise RuntimeError("Preview conversion did not generate a PDF file")
 
         for leftover in target_path.parent.iterdir():
-            if leftover.is_file() and leftover.name != target_path.name and leftover.suffix == ".pdf":
+            if (
+                leftover.is_file()
+                and leftover.name != target_path.name
+                and leftover.suffix == ".pdf"
+            ):
                 leftover.unlink(missing_ok=True)

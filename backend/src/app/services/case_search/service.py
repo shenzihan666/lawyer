@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
@@ -10,7 +10,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings
-from app.models import CaseSearchHit, CaseSearchQueryAsset, CaseSearchRecord, DocumentAsset
+from app.models import (
+    CaseSearchHit,
+    CaseSearchQueryAsset,
+    CaseSearchRecord,
+    DocumentAsset,
+)
 from app.schemas.case_search import (
     CaseSearchDetailResponse,
     CaseSearchHitItem,
@@ -182,12 +187,16 @@ class CaseSearchService:
         self.db.commit()
 
         if query_asset is not None:
-            self.preview_service.delete_preview_artifact(query_asset.preview_storage_path)
+            self.preview_service.delete_preview_artifact(
+                query_asset.preview_storage_path
+            )
             self.storage.delete_path(query_asset.storage_path)
             self.db.delete(query_asset)
             self.db.commit()
 
-    def _create_query_asset(self, upload: UploadFile) -> tuple[CaseSearchQueryAsset, str]:
+    def _create_query_asset(
+        self, upload: UploadFile
+    ) -> tuple[CaseSearchQueryAsset, str]:
         stored_file = self.storage.save_query_upload(upload)
         asset = CaseSearchQueryAsset(
             id=stored_file.document_id,
@@ -228,10 +237,14 @@ class CaseSearchService:
                 detail=f"Failed to extract query asset: {exc}",
             ) from exc
 
-        prepared_query, excerpt = self.query_builder.build_from_fragments(load_result.fragments)
+        prepared_query, excerpt = self.query_builder.build_from_fragments(
+            load_result.fragments
+        )
         asset.preview_excerpt = excerpt or None
         asset.extracted_text = "\n".join(
-            fragment.content.strip() for fragment in load_result.fragments if fragment.content.strip()
+            fragment.content.strip()
+            for fragment in load_result.fragments
+            if fragment.content.strip()
         )
         asset.extraction_status = "ready"
         self.db.flush()
@@ -258,7 +271,9 @@ class CaseSearchService:
 
         aggregated: list[AggregatedCaseHit] = []
         for document_id, group_items in grouped.items():
-            sorted_items = sorted(group_items, key=lambda item: item.score, reverse=True)
+            sorted_items = sorted(
+                group_items, key=lambda item: item.score, reverse=True
+            )
             max_score = sorted_items[0].score if sorted_items else 0.0
             chunk_bonus = min(0.2, max(0, len(sorted_items) - 1) * 0.05)
             document = document_map.get(document_id)
@@ -269,10 +284,16 @@ class CaseSearchService:
                     preview_excerpt=document.preview_excerpt if document else None,
                     aggregated_score=max_score + chunk_bonus,
                     matched_pages=sorted(
-                        {item.page_number for item in sorted_items if item.page_number > 0}
+                        {
+                            item.page_number
+                            for item in sorted_items
+                            if item.page_number > 0
+                        }
                     ),
                     matched_chunk_ids=[item.chunk_id for item in sorted_items],
-                    matched_snippets=[self._clip_text(item.content, 200) for item in sorted_items[:3]],
+                    matched_snippets=[
+                        self._clip_text(item.content, 200) for item in sorted_items[:3]
+                    ],
                     top_chunks=[
                         CaseSearchMatchedChunk(
                             chunk_id=item.chunk_id,
@@ -286,7 +307,9 @@ class CaseSearchService:
                     meta={
                         "max_chunk_score": max_score,
                         "chunk_bonus": chunk_bonus,
-                        "document_vector_status": document.vector_status if document else None,
+                        "document_vector_status": document.vector_status
+                        if document
+                        else None,
                     },
                 )
             )

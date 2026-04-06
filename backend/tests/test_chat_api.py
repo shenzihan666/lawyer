@@ -29,7 +29,11 @@ def test_chat_answer_route(client, monkeypatch) -> None:
 
     response = client.post(
         "/api/v1/chat/answer",
-        json={"query": "房子被别人占着怎么要回来", "top_k": 3, "document_ids": ["doc-1"]},
+        json={
+            "query": "房子被别人占着怎么要回来",
+            "top_k": 3,
+            "document_ids": ["doc-1"],
+        },
     )
 
     assert response.status_code == 200

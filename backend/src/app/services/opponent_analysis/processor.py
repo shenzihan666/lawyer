@@ -9,7 +9,10 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.models.opponent_analysis import OpponentAnalysisEventType, OpponentAnalysisStatus
+from app.models.opponent_analysis import (
+    OpponentAnalysisEventType,
+    OpponentAnalysisStatus,
+)
 from app.schemas.opponent_analysis import (
     OpponentAnalysisAgentPayload,
     OpponentAnalysisEvidenceItem,
@@ -257,7 +260,9 @@ class OpponentAnalysisProcessor:
                 title="预测总览已生成",
                 content=final_summary.opponent_position.summary,
                 structured_payload=final_summary.model_dump(),
-                citations=[item.model_dump() for item in final_summary.evidence_index[:4]],
+                citations=[
+                    item.model_dump() for item in final_summary.evidence_index[:4]
+                ],
                 event_status="done",
             )
             self.service.complete_run(
@@ -310,11 +315,15 @@ class OpponentAnalysisProcessor:
 
         fact_gaps: list[str] = []
         if not evidence_cards:
-            fact_gaps.append("当前没有检索到可直接支撑预测的证据片段，需要补充或放宽文档范围。")
+            fact_gaps.append(
+                "当前没有检索到可直接支撑预测的证据片段，需要补充或放宽文档范围。"
+            )
         if len(case_facts.strip()) < 80:
             fact_gaps.append("案情摘要较短，时间线、金额、沟通节点等关键细节可能不足。")
         if not any(char.isdigit() for char in case_facts):
-            fact_gaps.append("案情中缺少日期、金额或次数等量化细节，预测置信度会受影响。")
+            fact_gaps.append(
+                "案情中缺少日期、金额或次数等量化细节，预测置信度会受影响。"
+            )
         if len(fact_gaps) < 2:
             fact_gaps.append("需重点核实双方证据形成过程与证明目的是否一致。")
 
@@ -378,7 +387,9 @@ class OpponentAnalysisProcessor:
         revision: bool,
     ) -> OpponentAnalysisAgentPayload:
         agent_meta = AGENT_REGISTRY[agent_key]
-        upstream_json = {key: value.model_dump() for key, value in upstream_payloads.items()}
+        upstream_json = {
+            key: value.model_dump() for key, value in upstream_payloads.items()
+        }
         system_prompt = (
             "你是法律庭审推演工作流中的一个专业智能体。"
             "你必须只基于给定案情与证据进行预测，不得把预测写成确定事实。"
@@ -423,7 +434,9 @@ class OpponentAnalysisProcessor:
         upstream_payloads: dict[str, OpponentAnalysisAgentPayload],
         revision: bool,
     ) -> OpponentAnalysisAgentPayload:
-        issues = context_brief.get("issue_map", []) or self._extract_key_points(case_facts, limit=3)
+        issues = context_brief.get("issue_map", []) or self._extract_key_points(
+            case_facts, limit=3
+        )
         first_issue = issues[0] if issues else "案件核心争点"
         fact_gap = (context_brief.get("fact_gaps") or ["证据仍存在缺口"])[0]
         citation_numbers = [
@@ -460,7 +473,9 @@ class OpponentAnalysisProcessor:
                 "可能通过程序性措辞弱化不利事实的证明力。",
             ]
             if upstream_party and upstream_party.claims:
-                claims[0] = f"可能会把当事人的叙事“{upstream_party.claims[0]}”转写为正式法庭主张。"
+                claims[0] = (
+                    f"可能会把当事人的叙事“{upstream_party.claims[0]}”转写为正式法庭主张。"
+                )
             likely_quotes = [
                 "对方的证据只能证明片段事实，尚不足以完整证明其待证事项。",
                 "本案争议焦点不在情绪化叙事，而在证据是否足以形成闭合链条。",
@@ -483,7 +498,9 @@ class OpponentAnalysisProcessor:
                 "若双方口径冲突，法庭会优先看客观材料而非主观解释。",
             ]
             if upstream_counsel and upstream_counsel.attack_points:
-                claims[1] = f"对方律师最有可能抓住“{upstream_counsel.attack_points[0]}”持续施压。"
+                claims[1] = (
+                    f"对方律师最有可能抓住“{upstream_counsel.attack_points[0]}”持续施压。"
+                )
             likely_quotes = [
                 "请双方围绕关键事实节点对应具体证据，不要仅作概括性陈述。",
                 "如果对该节点存在异议，请说明证据形成时间、来源和证明目的。",
@@ -507,7 +524,9 @@ class OpponentAnalysisProcessor:
                 "法庭最看重的是事实与证据的一致性，而不是叙事强度。",
             ]
             if upstream_counsel and upstream_counsel.attack_points:
-                claims[1] = f"我方应优先回应对方可能攻击的“{upstream_counsel.attack_points[0]}”。"
+                claims[1] = (
+                    f"我方应优先回应对方可能攻击的“{upstream_counsel.attack_points[0]}”。"
+                )
             likely_quotes = [
                 "我方主张并非孤立陈述，而是有对应材料和时间节点相互印证。",
                 "即便对方试图弱化该证据，其形成过程和证明目的仍然清晰稳定。",
@@ -528,7 +547,9 @@ class OpponentAnalysisProcessor:
 
         if revision:
             notes = f"已根据校准意见修正：{notes}"
-            likely_actions = [action.replace("可能", "更可能") for action in likely_actions]
+            likely_actions = [
+                action.replace("可能", "更可能") for action in likely_actions
+            ]
             confidence = min(0.92, confidence + 0.05)
 
         return OpponentAnalysisAgentPayload(
@@ -600,7 +621,9 @@ class OpponentAnalysisProcessor:
         )
         raw = self.llm.chat_json(system_prompt=system_prompt, user_prompt=user_prompt)
         summary = OpponentAnalysisSummary(
-            opponent_position=OpponentAnalysisOpponentPosition.model_validate(raw.get("opponent_position", {})),
+            opponent_position=OpponentAnalysisOpponentPosition.model_validate(
+                raw.get("opponent_position", {})
+            ),
             lawyer_predictions=self._normalize_agent_payload(
                 raw.get("lawyer_predictions", {}),
                 context_brief.get("evidence_cards", []),
@@ -611,7 +634,9 @@ class OpponentAnalysisProcessor:
                 context_brief.get("evidence_cards", []),
                 "opponent_party",
             ),
-            response_plan=OpponentAnalysisResponsePlan.model_validate(raw.get("response_plan", {})),
+            response_plan=OpponentAnalysisResponsePlan.model_validate(
+                raw.get("response_plan", {})
+            ),
             evidence_index=[],
             risk_level=self._normalize_risk_level(raw.get("risk_level")),
         )
@@ -640,7 +665,9 @@ class OpponentAnalysisProcessor:
                 "response_plan": strategy_output,
             },
         )
-        attack_total = len(counsel_output.attack_points) + len(party_output.attack_points)
+        attack_total = len(counsel_output.attack_points) + len(
+            party_output.attack_points
+        )
         if not evidence_index:
             risk_level = "high"
         elif attack_total >= 5:
@@ -657,14 +684,19 @@ class OpponentAnalysisProcessor:
                     "并由律师把它包装成围绕证据完整性与证明责任展开的法庭主张。"
                 ),
                 claims=[*counsel_output.claims[:2], *party_output.claims[:1]][:3],
-                confidence=round(max(counsel_output.confidence, party_output.confidence), 2),
+                confidence=round(
+                    max(counsel_output.confidence, party_output.confidence), 2
+                ),
             ),
             lawyer_predictions=counsel_output,
             party_predictions=party_output,
             response_plan=OpponentAnalysisResponsePlan(
                 priority_actions=strategy_output.likely_actions[:3],
                 courtroom_responses=strategy_output.likely_quotes[:3],
-                evidence_to_prepare=(strategy_output.attack_points[:3] + context_brief.get("fact_gaps", [])[:2])[:4],
+                evidence_to_prepare=(
+                    strategy_output.attack_points[:3]
+                    + context_brief.get("fact_gaps", [])[:2]
+                )[:4],
                 notes=strategy_output.notes,
             ),
             evidence_index=evidence_index,
@@ -684,7 +716,9 @@ class OpponentAnalysisProcessor:
         evidence_cards: Sequence[dict],
         event_type: str,
     ) -> None:
-        citations = self.service.build_citations_by_number(evidence_cards, payload.citation_numbers)
+        citations = self.service.build_citations_by_number(
+            evidence_cards, payload.citation_numbers
+        )
         content = "；".join(payload.claims[:2]) or payload.notes
         self.service.append_event(
             run_id=run_id,
@@ -706,7 +740,9 @@ class OpponentAnalysisProcessor:
         evidence_cards: Sequence[dict],
         agent_key: str,
     ) -> OpponentAnalysisAgentPayload:
-        max_citation_number = max([int(item.get("citation_number", 0)) for item in evidence_cards] or [0])
+        max_citation_number = max(
+            [int(item.get("citation_number", 0)) for item in evidence_cards] or [0]
+        )
 
         def normalize_list(key: str, fallback: list[str]) -> list[str]:
             value = raw.get(key, fallback)
@@ -756,7 +792,9 @@ class OpponentAnalysisProcessor:
         payload_map: dict[str, OpponentAnalysisAgentPayload],
     ) -> list[OpponentAnalysisEvidenceItem]:
         evidence_by_number = {
-            int(item.get("citation_number", 0)): OpponentAnalysisEvidenceItem.model_validate(item)
+            int(
+                item.get("citation_number", 0)
+            ): OpponentAnalysisEvidenceItem.model_validate(item)
             for item in evidence_cards
             if int(item.get("citation_number", 0)) > 0
         }
@@ -766,7 +804,9 @@ class OpponentAnalysisProcessor:
                 evidence = evidence_by_number.get(number)
                 if not evidence:
                     continue
-                current = result_map.setdefault(evidence.chunk_id, evidence.model_copy(deep=True))
+                current = result_map.setdefault(
+                    evidence.chunk_id, evidence.model_copy(deep=True)
+                )
                 if phase_key not in current.phases:
                     current.phases.append(phase_key)
                 if phase_key not in current.used_by:

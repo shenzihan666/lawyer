@@ -140,9 +140,9 @@ def test_opponent_analysis_create_list_detail_stream_and_delete(
     assert payload["run"]["scope_document_ids"] == [scoped_document_id]
     assert payload["summary"]["risk_level"] in {"low", "medium", "high"}
     assert payload["summary"]["evidence_index"]
-    assert {
-        item["document_id"] for item in payload["summary"]["evidence_index"]
-    } == {scoped_document_id}
+    assert {item["document_id"] for item in payload["summary"]["evidence_index"]} == {
+        scoped_document_id
+    }
 
     events = payload["events"]
     assert len(events) == 10
@@ -159,7 +159,9 @@ def test_opponent_analysis_create_list_detail_stream_and_delete(
         "finalize",
     ]
 
-    party_event = next(event for event in events if event["phase"] == "party_projection")
+    party_event = next(
+        event for event in events if event["phase"] == "party_projection"
+    )
     counsel_event = next(
         event for event in events if event["phase"] == "counsel_projection"
     )
@@ -176,7 +178,10 @@ def test_opponent_analysis_create_list_detail_stream_and_delete(
     assert bench_event["from_agent"] == "bench_observer"
     assert "our_strategy_advisor" in (bench_event["to_agent"] or "")
 
-    assert [(item["from_agent"], item["to_agent"], item["event_type"]) for item in revision_events] == [
+    assert [
+        (item["from_agent"], item["to_agent"], item["event_type"])
+        for item in revision_events
+    ] == [
         ("opponent_party", "opponent_counsel", "agent_revision"),
         ("opponent_counsel", "our_strategy_advisor", "agent_revision"),
     ]
@@ -198,7 +203,9 @@ def test_opponent_analysis_create_list_detail_stream_and_delete(
     stream_payloads = _parse_sse_payloads(stream_response.text)
     assert stream_payloads[0]["type"] == "snapshot"
     assert stream_payloads[-1]["type"] == "done"
-    streamed_events = [item["event"] for item in stream_payloads if item["type"] == "event"]
+    streamed_events = [
+        item["event"] for item in stream_payloads if item["type"] == "event"
+    ]
     assert [event["seq"] for event in streamed_events] == list(range(1, 11))
 
     resumed_stream_response = client.get(
@@ -206,7 +213,9 @@ def test_opponent_analysis_create_list_detail_stream_and_delete(
         params={"after_seq": 8},
     )
     resumed_payloads = _parse_sse_payloads(resumed_stream_response.text)
-    resumed_events = [item["event"] for item in resumed_payloads if item["type"] == "event"]
+    resumed_events = [
+        item["event"] for item in resumed_payloads if item["type"] == "event"
+    ]
     assert [event["seq"] for event in resumed_events] == [9, 10]
     assert resumed_payloads[-1]["run"]["status"] == "completed"
 
@@ -230,7 +239,9 @@ def test_opponent_analysis_defaults_to_all_indexed_documents_when_scope_missing(
 
     def fake_search_chunks(self, query, top_k=None, document_ids=None):
         assert document_ids == []
-        return _build_search_response(first_document_id, second_document_id, query=query)
+        return _build_search_response(
+            first_document_id, second_document_id, query=query
+        )
 
     monkeypatch.setattr(DocumentVectorService, "search_chunks", fake_search_chunks)
     monkeypatch.setattr(OpponentAnalysisLLMClient, "is_configured", lambda self: False)
@@ -246,12 +257,15 @@ def test_opponent_analysis_defaults_to_all_indexed_documents_when_scope_missing(
     assert create_response.status_code == 201
     payload = _wait_for_terminal_run(client, create_response.json()["run"]["id"])
     assert payload["run"]["scope_document_ids"] == []
-    assert {
-        item["document_id"] for item in payload["summary"]["evidence_index"]
-    } == {first_document_id, second_document_id}
+    assert {item["document_id"] for item in payload["summary"]["evidence_index"]} == {
+        first_document_id,
+        second_document_id,
+    }
 
 
-def test_opponent_analysis_validates_empty_case_facts_and_document_scope(client) -> None:
+def test_opponent_analysis_validates_empty_case_facts_and_document_scope(
+    client,
+) -> None:
     not_indexed_document_id = _create_document_asset(
         original_filename="pending.pdf",
         vector_status=DocumentVectorStatus.not_requested.value,

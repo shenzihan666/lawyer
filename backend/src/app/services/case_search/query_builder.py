@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Sequence
@@ -22,9 +22,13 @@ class CaseSearchQueryBuilder:
         llm_result = self._try_llm_prepare_query(normalized)
         return llm_result or normalized
 
-    def build_from_fragments(self, fragments: Sequence[LoadedFragment]) -> tuple[str, str]:
+    def build_from_fragments(
+        self, fragments: Sequence[LoadedFragment]
+    ) -> tuple[str, str]:
         joined = "\n".join(
-            fragment.content.strip() for fragment in fragments if fragment.content.strip()
+            fragment.content.strip()
+            for fragment in fragments
+            if fragment.content.strip()
         )
         normalized = self._normalize(joined)
         excerpt = normalized[:280]

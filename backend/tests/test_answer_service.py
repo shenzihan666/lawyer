@@ -8,7 +8,9 @@ from app.services.answers.service import DocumentAnswerService
 from app.services.vectors import DocumentVectorService
 
 
-def _create_service(tmp_path, **settings_overrides) -> tuple[DocumentAnswerService, Session]:
+def _create_service(
+    tmp_path, **settings_overrides
+) -> tuple[DocumentAnswerService, Session]:
     engine = create_engine(
         f"sqlite+pysqlite:///{tmp_path / 'answer-service.db'}",
         future=True,
@@ -155,7 +157,10 @@ def test_answer_service_uses_extractive_fallback_when_model_not_configured(
     response = service.answer("房子被别人占着怎么要回来", top_k=5)
 
     assert response.meta["generation_mode"] == "extractive_fallback"
-    assert response.meta["answer_generation_skipped_reason"] == "answer_model_not_configured"
+    assert (
+        response.meta["answer_generation_skipped_reason"]
+        == "answer_model_not_configured"
+    )
     assert response.meta["used_source_count"] == 2
     assert len(response.citations) == 2
     assert "最相关依据摘要" in response.answer

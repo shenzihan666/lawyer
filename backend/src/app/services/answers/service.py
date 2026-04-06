@@ -51,7 +51,9 @@ class DocumentAnswerService:
             top_k=top_k,
             document_ids=document_ids,
         )
-        sources = search_response.items[: self.settings.answer_generation_max_context_items]
+        sources = search_response.items[
+            : self.settings.answer_generation_max_context_items
+        ]
 
         if not sources:
             return AnswerResponse(
@@ -97,9 +99,8 @@ class DocumentAnswerService:
             )
             answer_text = draft.answer.strip()
             if citations and not self._extract_citation_numbers(answer_text):
-                answer_text = (
-                    f"{answer_text}\n\n参考依据："
-                    + "".join(f"[{citation.citation_number}]" for citation in citations)
+                answer_text = f"{answer_text}\n\n参考依据：" + "".join(
+                    f"[{citation.citation_number}]" for citation in citations
                 )
             return AnswerResponse(
                 answer=answer_text,
@@ -158,7 +159,9 @@ class DocumentAnswerService:
         )
         yield {"type": "trace", "rag_trace": search_response.meta}
 
-        sources = search_response.items[: self.settings.answer_generation_max_context_items]
+        sources = search_response.items[
+            : self.settings.answer_generation_max_context_items
+        ]
 
         if not sources:
             response = self._build_no_results_response(search_response.meta)
@@ -302,9 +305,8 @@ class DocumentAnswerService:
             )
             retry_answer_text = draft.answer.strip()
             if citations and not self._extract_citation_numbers(retry_answer_text):
-                retry_answer_text = (
-                    f"{retry_answer_text}\n\n参考依据："
-                    + "".join(f"[{citation.citation_number}]" for citation in citations)
+                retry_answer_text = f"{retry_answer_text}\n\n参考依据：" + "".join(
+                    f"[{citation.citation_number}]" for citation in citations
                 )
 
             response = AnswerResponse(
@@ -588,7 +590,9 @@ class DocumentAnswerService:
                     chunk_index=item.chunk_index,
                     page_number=item.page_number,
                     original_filename=item.original_filename,
-                    snippet=item.content[: self.settings.answer_generation_max_content_chars],
+                    snippet=item.content[
+                        : self.settings.answer_generation_max_content_chars
+                    ],
                     score=item.score,
                     metadata=item.metadata,
                 )

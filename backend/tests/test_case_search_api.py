@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 import pytest
 
@@ -30,7 +30,9 @@ def _fake_load_result(loader_name: str = "PyPDFLoader") -> LoadResult:
     )
 
 
-def test_case_search_text_mode_aggregates_history_and_delete(client, monkeypatch) -> None:
+def test_case_search_text_mode_aggregates_history_and_delete(
+    client, monkeypatch
+) -> None:
     monkeypatch.setattr(registry, "load_document", lambda _path: _fake_load_result())
 
     upload_response = client.post(
@@ -101,7 +103,9 @@ def test_case_search_text_mode_aggregates_history_and_delete(client, monkeypatch
     assert client.get("/api/v1/case-searches").json()["items"] == []
 
 
-def test_case_search_upload_mode_does_not_create_document_asset(client, monkeypatch) -> None:
+def test_case_search_upload_mode_does_not_create_document_asset(
+    client, monkeypatch
+) -> None:
     monkeypatch.setattr(
         registry,
         "load_document",
@@ -119,7 +123,16 @@ def test_case_search_upload_mode_does_not_create_document_asset(client, monkeypa
     response = client.post(
         "/api/v1/case-searches",
         data={"top_k": "3"},
-        files=[("file", ("query.docx", b"docx-bytes", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))],
+        files=[
+            (
+                "file",
+                (
+                    "query.docx",
+                    b"docx-bytes",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ),
+            )
+        ],
     )
 
     assert response.status_code == 200
@@ -158,7 +171,9 @@ def test_document_preview_and_file_route_for_pdf(client, monkeypatch) -> None:
     assert file_response.headers["content-type"].startswith("application/pdf")
 
 
-def test_document_preview_handles_office_conversion_failure(client, monkeypatch) -> None:
+def test_document_preview_handles_office_conversion_failure(
+    client, monkeypatch
+) -> None:
     monkeypatch.setattr(
         registry,
         "load_document",
@@ -174,7 +189,16 @@ def test_document_preview_handles_office_conversion_failure(client, monkeypatch)
 
     upload_response = client.post(
         "/api/v1/documents/upload",
-        files=[("files", ("preview.docx", b"docx-preview-bytes", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))],
+        files=[
+            (
+                "files",
+                (
+                    "preview.docx",
+                    b"docx-preview-bytes",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ),
+            )
+        ],
     )
     assert upload_response.status_code == 200
     document_id = upload_response.json()["items"][0]["id"]

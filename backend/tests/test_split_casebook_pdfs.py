@@ -29,7 +29,9 @@ def create_sample_casebook_pdf(pdf_path: Path) -> None:
 
     writer.add_outline_item("序", 0, fit=Fit.xyz(top=395))
     chapter = writer.add_outline_item("一、示例章节", 0, fit=Fit.xyz(top=380))
-    section = writer.add_outline_item("(一)示例分类", 0, parent=chapter, fit=Fit.xyz(top=360))
+    section = writer.add_outline_item(
+        "(一)示例分类", 0, parent=chapter, fit=Fit.xyz(top=360)
+    )
     writer.add_outline_item("案例一标题", 0, parent=section, fit=Fit.xyz(top=300))
     writer.add_outline_item("案例二标题", 0, parent=section, fit=Fit.xyz(top=120))
     writer.add_outline_item("案例三标题", 1, parent=section, fit=Fit.xyz(top=250))
@@ -46,7 +48,11 @@ def test_collect_case_bookmarks_filters_outline_headings(tmp_path: Path) -> None
     reader = PdfReader(str(pdf_path))
     bookmarks = module.collect_case_bookmarks(reader)
 
-    assert [item.title for item in bookmarks] == ["案例一标题", "案例二标题", "案例三标题"]
+    assert [item.title for item in bookmarks] == [
+        "案例一标题",
+        "案例二标题",
+        "案例三标题",
+    ]
     assert bookmarks[0].parent_titles == ("一、示例章节", "(一)示例分类")
 
 
@@ -60,7 +66,9 @@ def test_split_single_pdf_crops_boundary_pages(tmp_path: Path) -> None:
 
     assert summary.case_count == 3
 
-    output_files = sorted(path for path in output_dir.glob("*.pdf") if path.name != "manifest.json")
+    output_files = sorted(
+        path for path in output_dir.glob("*.pdf") if path.name != "manifest.json"
+    )
     assert [path.name for path in output_files] == [
         "001_案例一标题.pdf",
         "002_案例二标题.pdf",
@@ -85,4 +93,8 @@ def test_split_single_pdf_crops_boundary_pages(tmp_path: Path) -> None:
     assert float(third_case.pages[0].mediabox.top) == 250.0
 
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert [item["title"] for item in manifest] == ["案例一标题", "案例二标题", "案例三标题"]
+    assert [item["title"] for item in manifest] == [
+        "案例一标题",
+        "案例二标题",
+        "案例三标题",
+    ]

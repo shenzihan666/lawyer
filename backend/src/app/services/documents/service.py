@@ -260,7 +260,9 @@ class DocumentService:
 
             preview_storage_path = None
             if isinstance(document.trace_metadata, dict):
-                preview_storage_path = document.trace_metadata.get("preview_storage_path")
+                preview_storage_path = document.trace_metadata.get(
+                    "preview_storage_path"
+                )
             self.preview_service.delete_preview_artifact(preview_storage_path)
             document.deleted_at = utcnow()
             document.ingestion_status = DocumentIngestionStatus.deleted.value

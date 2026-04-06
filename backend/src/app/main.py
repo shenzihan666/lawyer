@@ -58,6 +58,7 @@ def create_app() -> FastAPI:
         if settings.agent_enabled:
             try:
                 from app.services.agent.checkpoint import get_checkpointer
+
                 await get_checkpointer()
                 logger.info("Agent checkpointer ready", extra={"event": "agent_ready"})
             except Exception as exc:
@@ -107,7 +108,7 @@ def main() -> None:
     # Set event loop policy for Windows before uvicorn starts
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    
+
     settings = get_settings()
     configure_logging(settings)
     uvicorn.run(

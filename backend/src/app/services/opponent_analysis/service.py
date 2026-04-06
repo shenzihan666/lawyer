@@ -49,10 +49,14 @@ class OpponentAnalysisService:
     def list_runs(self) -> OpponentAnalysisListResponse:
         rows = list(
             self.db.scalars(
-                select(OpponentAnalysisRun).order_by(OpponentAnalysisRun.updated_at.desc())
+                select(OpponentAnalysisRun).order_by(
+                    OpponentAnalysisRun.updated_at.desc()
+                )
             )
         )
-        return OpponentAnalysisListResponse(items=[self._to_run_item(row) for row in rows])
+        return OpponentAnalysisListResponse(
+            items=[self._to_run_item(row) for row in rows]
+        )
 
     def get_run(self, run_id: str) -> OpponentAnalysisDetailResponse:
         run = self._get_run_model(run_id, with_events=True)
@@ -124,7 +128,9 @@ class OpponentAnalysisService:
         self.db.delete(run)
         self.db.commit()
 
-    def get_events_after(self, run_id: str, after_seq: int) -> list[OpponentAnalysisEventItem]:
+    def get_events_after(
+        self, run_id: str, after_seq: int
+    ) -> list[OpponentAnalysisEventItem]:
         self._get_run_model(run_id, with_events=False)
         events = list(
             self.db.scalars(
@@ -325,7 +331,9 @@ class OpponentAnalysisService:
             top_k=run.top_k,
             scope_document_ids=list(run.scope_document_ids_json or []),
             status=run.status,
-            risk_level=summary.risk_level if run.status == OpponentAnalysisStatus.completed.value else None,
+            risk_level=summary.risk_level
+            if run.status == OpponentAnalysisStatus.completed.value
+            else None,
             failure_reason=run.failure_reason,
             created_at=run.created_at,
             updated_at=run.updated_at,

@@ -76,39 +76,51 @@ async def stream_opponent_analysis(
     async def event_generator():
         latest_emitted_seq = after_seq
         snapshot = service.get_stream_snapshot(run_id)
-        yield "data: " + json.dumps(
-            {
-                "type": "snapshot",
-                "run": snapshot.run.model_dump(mode="json"),
-                "summary": snapshot.summary.model_dump(mode="json"),
-                "latest_seq": snapshot.latest_seq,
-            },
-            ensure_ascii=False,
-        ) + "\n\n"
+        yield (
+            "data: "
+            + json.dumps(
+                {
+                    "type": "snapshot",
+                    "run": snapshot.run.model_dump(mode="json"),
+                    "summary": snapshot.summary.model_dump(mode="json"),
+                    "latest_seq": snapshot.latest_seq,
+                },
+                ensure_ascii=False,
+            )
+            + "\n\n"
+        )
 
         while True:
             events = service.get_events_after(run_id, latest_emitted_seq)
             for event in events:
                 latest_emitted_seq = max(latest_emitted_seq, event.seq)
-                yield "data: " + json.dumps(
-                    {"type": "event", "event": event.model_dump(mode="json")},
-                    ensure_ascii=False,
-                ) + "\n\n"
+                yield (
+                    "data: "
+                    + json.dumps(
+                        {"type": "event", "event": event.model_dump(mode="json")},
+                        ensure_ascii=False,
+                    )
+                    + "\n\n"
+                )
 
             snapshot = service.get_stream_snapshot(run_id)
             if (
                 snapshot.run.status in terminal_statuses
                 and latest_emitted_seq >= snapshot.latest_seq
             ):
-                yield "data: " + json.dumps(
-                    {
-                        "type": "done",
-                        "run": snapshot.run.model_dump(mode="json"),
-                        "summary": snapshot.summary.model_dump(mode="json"),
-                        "latest_seq": snapshot.latest_seq,
-                    },
-                    ensure_ascii=False,
-                ) + "\n\n"
+                yield (
+                    "data: "
+                    + json.dumps(
+                        {
+                            "type": "done",
+                            "run": snapshot.run.model_dump(mode="json"),
+                            "summary": snapshot.summary.model_dump(mode="json"),
+                            "latest_seq": snapshot.latest_seq,
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n\n"
+                )
                 yield "data: [DONE]\n\n"
                 break
 

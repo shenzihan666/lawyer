@@ -4,7 +4,15 @@ import enum
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -45,13 +53,17 @@ class OpponentAnalysisRun(Base):
     summary_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     risk_cards_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
         onupdate=utcnow,
     )
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     events: Mapped[list["OpponentAnalysisEvent"]] = relationship(
         back_populates="run",
@@ -76,12 +88,16 @@ class OpponentAnalysisEvent(Base):
     round: Mapped[int] = mapped_column(Integer, default=0)
     from_agent: Mapped[str | None] = mapped_column(String(64), nullable=True)
     to_agent: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    event_type: Mapped[str] = mapped_column(String(32), default=OpponentAnalysisEventType.stage.value)
+    event_type: Mapped[str] = mapped_column(
+        String(32), default=OpponentAnalysisEventType.stage.value
+    )
     title: Mapped[str] = mapped_column(String(255))
     content: Mapped[str] = mapped_column(Text, default="")
     structured_payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     citations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(32), default="done")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
     run: Mapped[OpponentAnalysisRun] = relationship(back_populates="events")

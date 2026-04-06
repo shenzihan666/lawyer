@@ -29,14 +29,18 @@ class CaseSearchQueryAsset(Base):
     preview_status: Mapped[str] = mapped_column(String(32), default="not_requested")
     preview_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
         onupdate=utcnow,
     )
 
-    searches: Mapped[list["CaseSearchRecord"]] = relationship(back_populates="query_asset")
+    searches: Mapped[list["CaseSearchRecord"]] = relationship(
+        back_populates="query_asset"
+    )
 
 
 class CaseSearchRecord(Base):
@@ -54,14 +58,18 @@ class CaseSearchRecord(Base):
     )
     status: Mapped[str] = mapped_column(String(32), default="completed")
     result_count: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
         onupdate=utcnow,
     )
 
-    query_asset: Mapped[CaseSearchQueryAsset | None] = relationship(back_populates="searches")
+    query_asset: Mapped[CaseSearchQueryAsset | None] = relationship(
+        back_populates="searches"
+    )
     hits: Mapped[list["CaseSearchHit"]] = relationship(
         back_populates="search",
         cascade="all, delete-orphan",
@@ -88,6 +96,8 @@ class CaseSearchHit(Base):
     matched_chunk_ids_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     matched_snippets_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     hit_summary_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
     search: Mapped[CaseSearchRecord] = relationship(back_populates="hits")

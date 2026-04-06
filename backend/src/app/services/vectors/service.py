@@ -314,7 +314,9 @@ class DocumentVectorService:
                 rewrite_meta["query_rewrite_error"] = str(exc)
                 rewrite_meta["query_rewrite_skipped_reason"] = "rewrite_pipeline_failed"
         elif self.settings.query_rewrite_enabled:
-            rewrite_meta["query_rewrite_skipped_reason"] = "query_rewrite_not_configured"
+            rewrite_meta["query_rewrite_skipped_reason"] = (
+                "query_rewrite_not_configured"
+            )
 
         final_items = (
             self._merge_search_attempts(attempts, effective_top_k)
@@ -408,7 +410,10 @@ class DocumentVectorService:
 
         if self.query_rewrite_service.is_enabled():
             try:
-                rewrite_meta, expanded_attempts = yield from self._run_query_rewrite_pipeline_stream(
+                (
+                    rewrite_meta,
+                    expanded_attempts,
+                ) = yield from self._run_query_rewrite_pipeline_stream(
                     original_query=normalized_query,
                     initial_attempt=initial_attempt,
                     top_k=effective_top_k,
@@ -435,7 +440,9 @@ class DocumentVectorService:
                     status="error",
                 )
         elif self.settings.query_rewrite_enabled:
-            rewrite_meta["query_rewrite_skipped_reason"] = "query_rewrite_not_configured"
+            rewrite_meta["query_rewrite_skipped_reason"] = (
+                "query_rewrite_not_configured"
+            )
             yield self._progress_event(
                 key="query-rewrite-skipped",
                 label="扩展检索未配置",
@@ -829,10 +836,11 @@ class DocumentVectorService:
             **initial_attempt.meta,
             **rewrite_meta,
             "original_query": original_query,
-            "final_query": rewrite_meta.get("primary_expanded_query")
-            or original_query,
+            "final_query": rewrite_meta.get("primary_expanded_query") or original_query,
             "initial_result_count": len(initial_attempt.items),
-            "expanded_result_count": sum(len(attempt.items) for attempt in attempts[1:]),
+            "expanded_result_count": sum(
+                len(attempt.items) for attempt in attempts[1:]
+            ),
             "final_result_count": min(
                 top_k,
                 len(self._merge_search_attempts(attempts, top_k))
@@ -853,9 +861,7 @@ class DocumentVectorService:
                         "rerank_candidate_count"
                     ),
                     "rerank_error": attempt.meta.get("rerank_error"),
-                    "rerank_skipped_reason": attempt.meta.get(
-                        "rerank_skipped_reason"
-                    ),
+                    "rerank_skipped_reason": attempt.meta.get("rerank_skipped_reason"),
                     "auto_merge_applied": attempt.meta.get("auto_merge_applied"),
                     "auto_merge_replaced_chunks": attempt.meta.get(
                         "auto_merge_replaced_chunks"

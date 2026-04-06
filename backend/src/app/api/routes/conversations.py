@@ -87,15 +87,13 @@ def _parse_tool_result_content(content: object) -> dict | None:
 
 @router.get("", response_model=ConversationListResponse)
 def list_conversations(db: Session = Depends(get_db)):
-    rows = (
-        db.query(ConversationMeta)
-        .order_by(ConversationMeta.updated_at.desc())
-        .all()
-    )
+    rows = db.query(ConversationMeta).order_by(ConversationMeta.updated_at.desc()).all()
     return ConversationListResponse(items=[_meta_to_response(r) for r in rows])
 
 
-@router.post("", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED
+)
 def create_conversation(
     body: ConversationCreate | None = None,
     db: Session = Depends(get_db),

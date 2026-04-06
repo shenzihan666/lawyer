@@ -34,7 +34,9 @@ async def test_get_checkpointer_uses_async_postgres_components(monkeypatch) -> N
         "DATABASE_URL",
         "postgresql+psycopg://postgres:postgres@127.0.0.1:5433/lawyer",
     )
-    monkeypatch.setattr(checkpoint_module, "AsyncConnectionPool", FakeAsyncConnectionPool)
+    monkeypatch.setattr(
+        checkpoint_module, "AsyncConnectionPool", FakeAsyncConnectionPool
+    )
     monkeypatch.setattr(checkpoint_module, "AsyncPostgresSaver", FakeAsyncPostgresSaver)
     checkpoint_module._pool = None
     checkpoint_module._checkpointer = None

@@ -91,7 +91,9 @@ class UploadStorage:
 
     def build_preview_path(self, namespace: str, asset_id: str) -> Path:
         dated_dir = datetime.now().strftime("%Y/%m")
-        target_dir = self.settings.upload_root / "previews" / namespace / dated_dir / asset_id
+        target_dir = (
+            self.settings.upload_root / "previews" / namespace / dated_dir / asset_id
+        )
         target_dir.mkdir(parents=True, exist_ok=True)
         return target_dir / "preview.pdf"
 
@@ -109,7 +111,9 @@ class UploadStorage:
         if not any(
             resolved == root or root in resolved.parents for root in allowed_roots
         ):
-            raise ValueError(f"Resolved path escapes allowed roots: {relative_or_absolute}")
+            raise ValueError(
+                f"Resolved path escapes allowed roots: {relative_or_absolute}"
+            )
         return resolved
 
     def delete_path(self, relative_or_absolute: str) -> None:
