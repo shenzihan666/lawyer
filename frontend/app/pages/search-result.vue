@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { storeToRefs } from "pinia";
+import CaseResultPdfPreview from "../components/case-search/CaseResultPdfPreview.vue";
 import { useCaseSearchStore } from "../../stores/caseSearch";
 
 const route = useRoute();
@@ -8,7 +9,6 @@ const caseSearchStore = useCaseSearchStore();
 const {
   detail,
   preview,
-  activeHitId,
   previewTab,
   activeHit,
   isLoadingDetail,
@@ -31,6 +31,58 @@ const previewPdfUrl = computed(
     resolveApiUrl(preview.value?.preview_url) ||
     resolveApiUrl(preview.value?.file_url),
 );
+const resolvedFileUrl = computed(() => resolveApiUrl(preview.value?.file_url));
+const resolvedPreviewUrl = computed(() =>
+  resolveApiUrl(preview.value?.preview_url),
+);
+const canRenderPdfPreview = computed(
+  () =>
+    Boolean(previewPdfUrl.value) && preview.value?.preview_status === "ready",
+);
+const previewViewerKey = computed(() => {
+  if (!preview.value || !previewPdfUrl.value) return "case-preview";
+  return `${preview.value.asset_id}:${previewPdfUrl.value}`;
+});
+const previewStatusText = computed(() => {
+  switch (preview.value?.preview_status) {
+    case "ready":
+      return "PDF 预览已就绪";
+    case "failed":
+      return "PDF 预览生成失败";
+    case "unsupported":
+      return "当前文件暂不支持 PDF 预览";
+    case "not_requested":
+      return "PDF 预览尚未准备";
+    default:
+      return "正在准备 PDF 预览";
+  }
+});
+const previewStatusHint = computed(() => {
+  switch (preview.value?.preview_status) {
+    case "ready":
+      return "页内预览已切换到受控渲染模式，切换命中案件时会自动刷新文档。";
+    case "failed":
+      return "系统没能生成稳定的页内预览，请改用新窗口或下载原文件继续查看。";
+    case "unsupported":
+      return "当前案件文件不支持转换为 PDF 预览，仍可下载原文件核对内容。";
+    case "not_requested":
+      return "预览文件尚未准备完成，稍后重试或先查看结构化正文。";
+    default:
+      return "系统正在准备文档预览资源，请稍候片刻。";
+  }
+});
+const previewStatusTone = computed(() => {
+  switch (preview.value?.preview_status) {
+    case "ready":
+      return "success";
+    case "failed":
+      return "error";
+    case "unsupported":
+      return "warning";
+    default:
+      return "neutral";
+  }
+});
 
 const searchId = computed(() => {
   const value = route.query.searchId;
@@ -98,7 +150,7 @@ watch(
           <p class="case-search-hero__eyebrow">Case Retrieval Desk</p>
           <h1>类案结果预览</h1>
           <p class="case-search-hero__copy">
-            这里展示你在检索页选中的案件结果。预览不会在结果页直接展开，只有点击结果后才会进入此页。
+            这里展示你在检索页选中的案件结果。结果页不会直接展开原文，只有点击某个命中案件后才会进入此页查看完整预览。
           </p>
         </div>
         <UButton
@@ -127,12 +179,12 @@ watch(
               </h2>
             </div>
             <div class="detail-badges">
-              <UBadge v-if="detail" color="primary" variant="subtle"
-                >{{ detail.item.result_count }} 条案件</UBadge
-              >
-              <UBadge v-if="activeHit" color="warning" variant="subtle"
-                >{{ activeHit.matched_chunk_count }} 命中</UBadge
-              >
+              <UBadge v-if="detail" color="primary" variant="subtle">
+                {{ detail.item.result_count }} 条案件
+              </UBadge>
+              <UBadge v-if="activeHit" color="warning" variant="subtle">
+                {{ activeHit.matched_chunk_count }} 个命中片段
+              </UBadge>
             </div>
           </div>
 
@@ -141,11 +193,13 @@ watch(
           </p>
           <div v-if="activeHit" class="detail-hit-meta">
             <span>#{{ activeHit.rank }}</span>
-            <span>{{
-              activeHit.matched_pages.length
-                ? `页码 ${activeHit.matched_pages.join(" / ")}`
-                : "未标记页码"
-            }}</span>
+            <span>
+              {{
+                activeHit.matched_pages.length
+                  ? `页码 ${activeHit.matched_pages.join(" / ")}`
+                  : "暂无页码信息"
+              }}
+            </span>
             <span>score {{ formatScore(activeHit.score) }}</span>
           </div>
         </section>
@@ -194,8 +248,9 @@ watch(
               v-for="page in activeHit.matched_pages"
               :key="page"
               class="match-chip"
-              >第 {{ page }} 页</span
             >
+              第 {{ page }} 页
+            </span>
           </div>
 
           <article class="full-content-card">
@@ -228,22 +283,31 @@ watch(
           </div>
 
           <div class="original-preview-card">
-            <p class="original-preview-card__copy">
-              当前预览状态：{{ preview.preview_status }}
-            </p>
+            <div class="original-preview-card__status">
+              <div class="original-preview-card__status-copy">
+                <p class="original-preview-card__eyebrow">Viewer Status</p>
+                <h3>{{ previewStatusText }}</h3>
+                <p class="original-preview-card__copy">
+                  {{ previewStatusHint }}
+                </p>
+              </div>
+              <UBadge :color="previewStatusTone as any" variant="subtle">
+                {{ preview.preview_status }}
+              </UBadge>
+            </div>
             <div class="original-preview-card__actions">
               <a
                 class="preview-link"
-                :href="resolveApiUrl(preview.file_url) || '#'"
+                :href="resolvedFileUrl || '#'"
                 target="_blank"
                 rel="noreferrer"
               >
                 下载原文件
               </a>
               <a
-                v-if="resolveApiUrl(preview.preview_url)"
+                v-if="resolvedPreviewUrl"
                 class="preview-link preview-link--primary"
-                :href="resolveApiUrl(preview.preview_url) || '#'"
+                :href="resolvedPreviewUrl || '#'"
                 target="_blank"
                 rel="noreferrer"
               >
@@ -252,14 +316,18 @@ watch(
             </div>
           </div>
 
-          <iframe
-            v-if="previewPdfUrl"
-            class="original-preview-pdf"
-            :src="previewPdfUrl"
-            title="案件原始 PDF 预览"
+          <CaseResultPdfPreview
+            v-if="canRenderPdfPreview && previewPdfUrl"
+            :key="previewViewerKey"
+            :source-url="previewPdfUrl"
+            :title="preview.original_filename"
+            :status="preview.preview_status"
           />
-          <div v-else class="empty-state empty-state--flat">
-            当前文件预览尚不可用。系统会优先展示结构化正文，你仍然可以下载原文件查看。
+          <div
+            v-else
+            class="empty-state empty-state--flat original-preview-empty"
+          >
+            当前文件预览尚不可用。系统会优先展示结构化正文，你仍然可以下载原文件或在新窗口查看转换后的预览。
           </div>
         </section>
       </main>
@@ -480,6 +548,36 @@ watch(
   color: #8f877a;
 }
 
+.original-preview-card {
+  display: grid;
+  gap: 14px;
+}
+
+.original-preview-card__status {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.original-preview-card__status-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.original-preview-card__eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8f877a;
+}
+
+.original-preview-card__status-copy h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #18181b;
+}
+
 .match-chip {
   display: inline-flex;
   align-items: center;
@@ -528,15 +626,8 @@ watch(
   min-height: 0;
 }
 
-.original-preview-pdf {
-  width: 100%;
-  min-height: 680px;
-  max-height: 75vh;
-  overflow: hidden;
-  padding: 0;
-  border: 1px solid #e9e0d0;
-  border-radius: 24px;
-  background: #fff;
+.original-preview-empty {
+  min-height: 180px;
 }
 
 .empty-state {
@@ -576,7 +667,8 @@ watch(
   .hero-row,
   .case-block__header,
   .original-preview-card__actions,
-  .detail-hit-meta {
+  .detail-hit-meta,
+  .original-preview-card__status {
     flex-direction: column;
   }
 }
