@@ -20,8 +20,16 @@ from app.schemas.opponent_analysis import (
     OpponentAnalysisResponsePlan,
     OpponentAnalysisSummary,
 )
+from app.services.analytics import AnalyticsService
 from app.services.opponent_analysis.llm import OpponentAnalysisLLMClient
 from app.services.opponent_analysis.service import OpponentAnalysisService
+from app.services.prompts import (
+    PromptSegment,
+    TokenBudget,
+    assemble_prompt_segments,
+    build_opponent_analysis_agent_system_prompt,
+    build_opponent_analysis_summary_system_prompt,
+)
 from app.services.vectors import DocumentVectorService
 
 logger = logging.getLogger(__name__)
@@ -63,11 +71,25 @@ class OpponentAnalysisProcessor:
         self.service = OpponentAnalysisService(db=db, settings=settings)
         self.vector_service = DocumentVectorService(db=db, settings=settings)
         self.llm = OpponentAnalysisLLMClient(settings)
+        self.analytics = AnalyticsService(db=db, settings=settings)
 
     def run(self, run_id: str) -> None:
         run = self.service.get_run(run_id).run
+        analytics_run = self.analytics.start_run(
+            run_kind="opponent_analysis",
+            resource_type="opponent_analysis_run",
+            resource_id=run_id,
+            metadata={"top_k": run.top_k, "document_scope": run.scope_document_ids},
+        )
         try:
             self.service.update_run_status(run_id, OpponentAnalysisStatus.running.value)
+            self.analytics.append_step(
+                analytics_run.id,
+                step_key="context_brief",
+                title="Build shared context brief",
+                status="running",
+                payload={"phase": "context_brief"},
+            )
             self.service.append_event(
                 run_id=run_id,
                 phase="context_brief",
@@ -100,6 +122,16 @@ class OpponentAnalysisProcessor:
                 citations=context_brief["evidence_cards"],
                 event_status="done",
             )
+            self.analytics.append_step(
+                analytics_run.id,
+                step_key="context_brief",
+                title="Shared context brief completed",
+                status="done",
+                payload={
+                    "evidence_count": len(context_brief["evidence_cards"]),
+                    "fact_gap_count": len(context_brief["fact_gaps"]),
+                },
+            )
 
             party_output = self._generate_agent_output(
                 agent_key="opponent_party",
@@ -121,6 +153,9 @@ class OpponentAnalysisProcessor:
                 evidence_cards=context_brief["evidence_cards"],
                 event_type=OpponentAnalysisEventType.agent_message.value,
             )
+            self._record_agent_phase(
+                analytics_run.id, "party_projection", "opponent_party", party_output
+            )
 
             counsel_output = self._generate_agent_output(
                 agent_key="opponent_counsel",
@@ -141,6 +176,12 @@ class OpponentAnalysisProcessor:
                 payload=counsel_output,
                 evidence_cards=context_brief["evidence_cards"],
                 event_type=OpponentAnalysisEventType.agent_message.value,
+            )
+            self._record_agent_phase(
+                analytics_run.id,
+                "counsel_projection",
+                "opponent_counsel",
+                counsel_output,
             )
 
             bench_output = self._generate_agent_output(
@@ -165,6 +206,9 @@ class OpponentAnalysisProcessor:
                 payload=bench_output,
                 evidence_cards=context_brief["evidence_cards"],
                 event_type=OpponentAnalysisEventType.agent_message.value,
+            )
+            self._record_agent_phase(
+                analytics_run.id, "bench_review", "bench_observer", bench_output
             )
 
             strategy_output = self._generate_agent_output(
@@ -191,6 +235,12 @@ class OpponentAnalysisProcessor:
                 evidence_cards=context_brief["evidence_cards"],
                 event_type=OpponentAnalysisEventType.agent_message.value,
             )
+            self._record_agent_phase(
+                analytics_run.id,
+                "strategy_response",
+                "our_strategy_advisor",
+                strategy_output,
+            )
 
             revised_party_output = self._generate_agent_output(
                 agent_key="opponent_party",
@@ -215,6 +265,12 @@ class OpponentAnalysisProcessor:
                 payload=revised_party_output,
                 evidence_cards=context_brief["evidence_cards"],
                 event_type=OpponentAnalysisEventType.agent_revision.value,
+            )
+            self._record_agent_phase(
+                analytics_run.id,
+                "revision_party",
+                "opponent_party",
+                revised_party_output,
             )
 
             revised_counsel_output = self._generate_agent_output(
@@ -241,6 +297,12 @@ class OpponentAnalysisProcessor:
                 payload=revised_counsel_output,
                 evidence_cards=context_brief["evidence_cards"],
                 event_type=OpponentAnalysisEventType.agent_revision.value,
+            )
+            self._record_agent_phase(
+                analytics_run.id,
+                "revision_counsel",
+                "opponent_counsel",
+                revised_counsel_output,
             )
 
             final_summary = self._build_final_summary(
@@ -273,6 +335,14 @@ class OpponentAnalysisProcessor:
                     for item in final_summary.response_plan.priority_actions[:3]
                 ],
             )
+            self.analytics.finish_run(
+                analytics_run.id,
+                status="completed",
+                summary={
+                    "risk_level": final_summary.risk_level,
+                    "evidence_count": len(final_summary.evidence_index),
+                },
+            )
         except Exception as exc:
             logger.exception("Opponent analysis failed", extra={"run_id": run_id})
             self.service.append_event(
@@ -289,6 +359,11 @@ class OpponentAnalysisProcessor:
                 event_status="error",
             )
             self.service.fail_run(run_id, str(exc))
+            self.analytics.finish_run(
+                analytics_run.id,
+                status="failed",
+                summary={"error": str(exc)},
+            )
             raise
 
     def _build_context_brief(
@@ -390,37 +465,62 @@ class OpponentAnalysisProcessor:
         upstream_json = {
             key: value.model_dump() for key, value in upstream_payloads.items()
         }
-        system_prompt = (
-            "你是法律庭审推演工作流中的一个专业智能体。"
-            "你必须只基于给定案情与证据进行预测，不得把预测写成确定事实。"
-            "所有结论都要使用“可能、倾向于、预计、建议”等审慎措辞。"
-            "请只输出 JSON。"
-        )
-        user_prompt = (
-            f"当前阶段: {phase}\n"
-            f"回合: {round_number}\n"
-            f"角色: {agent_meta['label']}\n"
-            f"职责: {agent_meta['objective']}\n"
-            f"是否修正轮: {json.dumps(revision, ensure_ascii=False)}\n\n"
-            f"案情摘要:\n{case_facts.strip()}\n\n"
-            f"共享上下文:\n{json.dumps(context_brief, ensure_ascii=False)}\n\n"
-            f"上游智能体输出:\n{json.dumps(upstream_json, ensure_ascii=False)}\n\n"
-            "请输出 JSON，字段固定如下：\n"
-            "{"
-            '"claims":["3条以内的关键预测主张"],'
-            '"likely_quotes":["2到3句庭上可能说出的话"],'
-            '"likely_actions":["2到4个动作或策略"],'
-            '"attack_points":["2到4个可能攻击或回避的点"],'
-            '"confidence":0.0,'
-            '"notes":"一句总结说明",'
-            '"citation_numbers":[1,2]'
-            "}\n\n"
-            "要求：\n"
-            "1. 只能引用 evidence_cards 中出现的 citation_numbers。\n"
-            "2. confidence 取值 0 到 1。\n"
-            "3. revision=true 时，要显式吸收庭审观察员意见并修正原先说法。\n"
-            "4. 如果证据不足，可以保守输出，但不要返回空结构。"
-        )
+        system_prompt = assemble_prompt_segments(
+            build_opponent_analysis_agent_system_prompt(),
+            TokenBudget(max_input_tokens=500, reserved_output_tokens=120),
+        ).text
+        user_prompt = assemble_prompt_segments(
+            [
+                PromptSegment(
+                    key="stage",
+                    version="v1",
+                    content=(
+                        f"当前阶段: {phase}\n"
+                        f"回合: {round_number}\n"
+                        f"角色: {agent_meta['label']}\n"
+                        f"职责: {agent_meta['objective']}\n"
+                        f"是否修正轮: {json.dumps(revision, ensure_ascii=False)}"
+                    ),
+                ),
+                PromptSegment(
+                    key="case",
+                    version="v1",
+                    content=f"案情摘要:\n{case_facts.strip()}",
+                ),
+                PromptSegment(
+                    key="context",
+                    version="v1",
+                    content=f"共享上下文:\n{json.dumps(context_brief, ensure_ascii=False)}",
+                ),
+                PromptSegment(
+                    key="upstream",
+                    version="v1",
+                    content=f"上游智能体输出:\n{json.dumps(upstream_json, ensure_ascii=False)}",
+                ),
+                PromptSegment(
+                    key="schema",
+                    version="v1",
+                    content=(
+                        "请输出 JSON，字段固定如下：\n"
+                        "{"
+                        '"claims":["3条以内的关键预测主张"],'
+                        '"likely_quotes":["2到3句庭上可能说出的话"],'
+                        '"likely_actions":["2到4个动作或策略"],'
+                        '"attack_points":["2到4个可能攻击或回避的点"],'
+                        '"confidence":0.0,'
+                        '"notes":"一句总结说明",'
+                        '"citation_numbers":[1,2]'
+                        "}\n\n"
+                        "要求：\n"
+                        "1. 只能引用 evidence_cards 中出现的 citation_numbers。\n"
+                        "2. confidence 取值 0 到 1。\n"
+                        "3. revision=true 时，要显式吸收庭审观察员意见并修正原先说法。\n"
+                        "4. 如果证据不足，可以保守输出，但不要返回空结构。"
+                    ),
+                ),
+            ],
+            TokenBudget(max_input_tokens=2600, reserved_output_tokens=700),
+        ).text
         raw = self.llm.chat_json(system_prompt=system_prompt, user_prompt=user_prompt)
         return self._normalize_agent_payload(raw, evidence_cards, agent_key)
 
@@ -599,26 +699,54 @@ class OpponentAnalysisProcessor:
         counsel_output: OpponentAnalysisAgentPayload,
         strategy_output: OpponentAnalysisAgentPayload,
     ) -> OpponentAnalysisSummary:
-        system_prompt = (
-            "你是法律预测看板的汇总智能体。"
-            "你必须把前面多智能体的预测整理成稳定 JSON，不得把预测写成确定事实。"
-            "所有输出必须使用审慎措辞，并且只引用给定 evidence_cards 中的 citation_number。"
-        )
-        user_prompt = (
-            f"案情摘要:\n{case_facts.strip()}\n\n"
-            f"共享上下文:\n{json.dumps(context_brief, ensure_ascii=False)}\n\n"
-            f"对方当事人输出:\n{json.dumps(party_output.model_dump(), ensure_ascii=False)}\n\n"
-            f"对方律师输出:\n{json.dumps(counsel_output.model_dump(), ensure_ascii=False)}\n\n"
-            f"我方策略官输出:\n{json.dumps(strategy_output.model_dump(), ensure_ascii=False)}\n\n"
-            "请输出 JSON，结构如下：\n"
-            "{"
-            '"opponent_position":{"summary":"...","claims":["..."],"confidence":0.0},'
-            '"lawyer_predictions":{"claims":[],"likely_quotes":[],"likely_actions":[],"attack_points":[],"confidence":0.0,"notes":"...","citation_numbers":[1,2]},'
-            '"party_predictions":{"claims":[],"likely_quotes":[],"likely_actions":[],"attack_points":[],"confidence":0.0,"notes":"...","citation_numbers":[1,2]},'
-            '"response_plan":{"priority_actions":[],"courtroom_responses":[],"evidence_to_prepare":[],"notes":"..."},'
-            '"risk_level":"low|medium|high"'
-            "}"
-        )
+        system_prompt = assemble_prompt_segments(
+            build_opponent_analysis_summary_system_prompt(),
+            TokenBudget(max_input_tokens=500, reserved_output_tokens=120),
+        ).text
+        user_prompt = assemble_prompt_segments(
+            [
+                PromptSegment(
+                    key="case",
+                    version="v1",
+                    content=f"案情摘要:\n{case_facts.strip()}",
+                ),
+                PromptSegment(
+                    key="context",
+                    version="v1",
+                    content=f"共享上下文:\n{json.dumps(context_brief, ensure_ascii=False)}",
+                ),
+                PromptSegment(
+                    key="party",
+                    version="v1",
+                    content=f"对方当事人输出:\n{json.dumps(party_output.model_dump(), ensure_ascii=False)}",
+                ),
+                PromptSegment(
+                    key="counsel",
+                    version="v1",
+                    content=f"对方律师输出:\n{json.dumps(counsel_output.model_dump(), ensure_ascii=False)}",
+                ),
+                PromptSegment(
+                    key="strategy",
+                    version="v1",
+                    content=f"我方策略官输出:\n{json.dumps(strategy_output.model_dump(), ensure_ascii=False)}",
+                ),
+                PromptSegment(
+                    key="schema",
+                    version="v1",
+                    content=(
+                        "请输出 JSON，结构如下：\n"
+                        "{"
+                        '"opponent_position":{"summary":"...","claims":["..."],"confidence":0.0},'
+                        '"lawyer_predictions":{"claims":[],"likely_quotes":[],"likely_actions":[],"attack_points":[],"confidence":0.0,"notes":"...","citation_numbers":[1,2]},'
+                        '"party_predictions":{"claims":[],"likely_quotes":[],"likely_actions":[],"attack_points":[],"confidence":0.0,"notes":"...","citation_numbers":[1,2]},'
+                        '"response_plan":{"priority_actions":[],"courtroom_responses":[],"evidence_to_prepare":[],"notes":"..."},'
+                        '"risk_level":"low|medium|high"'
+                        "}"
+                    ),
+                ),
+            ],
+            TokenBudget(max_input_tokens=2600, reserved_output_tokens=700),
+        ).text
         raw = self.llm.chat_json(system_prompt=system_prompt, user_prompt=user_prompt)
         summary = OpponentAnalysisSummary(
             opponent_position=OpponentAnalysisOpponentPosition.model_validate(
@@ -732,6 +860,26 @@ class OpponentAnalysisProcessor:
             structured_payload=payload.model_dump(),
             citations=citations,
             event_status="done",
+        )
+
+    def _record_agent_phase(
+        self,
+        analytics_run_id: str,
+        phase: str,
+        agent_key: str,
+        payload: OpponentAnalysisAgentPayload,
+    ) -> None:
+        self.analytics.append_step(
+            analytics_run_id,
+            step_key=phase,
+            title=f"{agent_key} phase completed",
+            status="done",
+            payload={
+                "agent_key": agent_key,
+                "claim_count": len(payload.claims),
+                "citation_count": len(payload.citation_numbers),
+                "confidence": payload.confidence,
+            },
         )
 
     def _normalize_agent_payload(

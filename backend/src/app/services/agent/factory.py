@@ -8,30 +8,14 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from app.core.config import get_settings
+from app.services.prompts import (
+    TokenBudget,
+    assemble_prompt_segments,
+    build_legal_agent_system_prompt,
+)
 from app.services.agent.tools import legal_knowledge_search
 
 logger = logging.getLogger(__name__)
-
-LEGAL_SYSTEM_PROMPT = """\
-You are a legal knowledge base assistant.
-
-You must answer strictly based on the retrieved sources and never invent laws,
-case numbers, facts, or conclusions.
-
-When you need evidence from the knowledge base, use the
-`legal_knowledge_search` tool. The tool performs retrieval, reranking, and
-returns a grounded answer with citations.
-
-Core rules:
-1. Only cite source numbers returned by the knowledge base.
-2. Answer directly first, then explain the supporting basis.
-3. If the available information is insufficient, say so explicitly.
-4. You may call the retrieval tool multiple times when needed.
-5. Stay professional and cautious.
-6. Always answer in Chinese.
-7. If the current request already limits document scope or source count, you
-   must respect those constraints and never broaden them on your own.
-"""
 
 
 def _build_legal_search_tool(
@@ -75,6 +59,10 @@ def create_lawyer_agent(
     from deepagents import create_deep_agent
 
     settings = get_settings()
+    system_prompt = assemble_prompt_segments(
+        build_legal_agent_system_prompt(),
+        TokenBudget(max_input_tokens=700, reserved_output_tokens=120),
+    ).text
     legal_search_tool = _build_legal_search_tool(
         default_top_k=default_top_k,
         default_document_ids=default_document_ids,
@@ -92,7 +80,7 @@ def create_lawyer_agent(
         agent = create_deep_agent(
             model=model,
             tools=[legal_search_tool],
-            system_prompt=LEGAL_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             checkpointer=checkpointer,
         )
     except TypeError as exc:
@@ -103,7 +91,7 @@ def create_lawyer_agent(
         agent = create_deep_agent(
             model=model,
             tools=[legal_search_tool],
-            system_prompt=LEGAL_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
         )
 
     logger.info(

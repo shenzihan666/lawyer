@@ -4,6 +4,12 @@ import json
 from typing import Any
 
 from app.core.config import Settings
+from app.services.prompts import (
+    PromptSegment,
+    TokenBudget,
+    assemble_prompt_segments,
+    build_contract_review_system_prompt,
+)
 from app.services.contract_review.analysis import (
     AnalysisFinding,
     build_checklist_summary,
@@ -69,14 +75,10 @@ class ContractReviewLLMAnalyzer:
         return findings, summary, overview
 
     def _build_system_prompt(self) -> str:
-        return (
-            "你是法律合同审查助手。"
-            "你必须严格依据给定的合同条款、全局规则和审查清单进行判断。"
-            "不要编造条款、页码、证据或结论。"
-            "每个清单项都必须返回一条结果。"
-            "除 status=missing 外，其余结果必须给出可定位的 evidence_items。"
-            "请只输出 JSON。"
-        )
+        return assemble_prompt_segments(
+            build_contract_review_system_prompt(),
+            TokenBudget(max_input_tokens=600, reserved_output_tokens=150),
+        ).text
 
     def _build_user_prompt(
         self,
@@ -134,7 +136,36 @@ class ContractReviewLLMAnalyzer:
             "4. 仅能引用给定合同条款中的 clause_path / clause_title / 摘录。",
             "5. 如果合同中找不到足够证据，请返回 status=missing 并说明原因。",
         ]
-        return "\n".join(prompt_parts)
+        return assemble_prompt_segments(
+            [
+                PromptSegment(
+                    key="task",
+                    version="v1",
+                    content="\n".join(prompt_parts[:3]),
+                ),
+                PromptSegment(
+                    key="global-rules",
+                    version="v1",
+                    content="\n".join(prompt_parts[3:8]),
+                ),
+                PromptSegment(
+                    key="checklist",
+                    version="v1",
+                    content="\n".join(prompt_parts[8:12]),
+                ),
+                PromptSegment(
+                    key="clauses",
+                    version="v1",
+                    content="\n".join(prompt_parts[12:15]),
+                ),
+                PromptSegment(
+                    key="schema",
+                    version="v1",
+                    content="\n".join(prompt_parts[15:]),
+                ),
+            ],
+            TokenBudget(max_input_tokens=3200, reserved_output_tokens=700),
+        ).text
 
     def _format_clauses(self, clauses: list[ParsedClause]) -> str:
         rendered: list[str] = []
@@ -212,7 +243,9 @@ class ContractReviewLLMAnalyzer:
         checklist_item: dict[str, Any],
         clauses: list[ParsedClause],
     ) -> AnalysisFinding:
-        title = str(raw_item.get("title") or checklist_item.get("title") or "未命名检查项")
+        title = str(
+            raw_item.get("title") or checklist_item.get("title") or "未命名检查项"
+        )
         severity = normalize_severity(raw_item.get("severity"))
         status = normalize_status(raw_item.get("status"))
         issue = str(raw_item.get("issue", "")).strip() or "模型未提供问题说明。"

@@ -7,7 +7,9 @@ from typing import Any
 from langchain_core.tools import tool
 
 from app.core.config import get_settings
+from app.core.logging import request_id_context
 from app.db.session import get_session_factory
+from app.services.governance import ToolGovernanceService
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +37,24 @@ def legal_knowledge_search(
     session_factory = get_session_factory()
     db = session_factory()
     try:
-        service = DocumentAnswerService(db=db, settings=settings)
-        result = service.answer(
+        governance = ToolGovernanceService(db=db, settings=settings)
+        trace_id = request_id_context.get()
+        result = governance.execute_legal_knowledge_search(
             query=query,
             top_k=top_k,
-            document_ids=document_ids or [],
+            document_ids=document_ids,
+            trace_id=trace_id,
+            executor=lambda payload: (
+                DocumentAnswerService(db=db, settings=settings)
+                .answer(
+                    query=payload.query,
+                    top_k=payload.top_k,
+                    document_ids=payload.document_ids,
+                )
+                .model_dump()
+            ),
         )
-        return result.model_dump()
+        return result
     except Exception as exc:
         logger.warning(
             "legal_knowledge_search tool failed",

@@ -53,6 +53,26 @@ def create_app() -> FastAPI:
         wait_for_database()
         Base.metadata.create_all(bind=get_engine())
         logger.info("Database schema ready", extra={"event": "database_schema_ready"})
+        try:
+            from app.db.session import get_session_factory
+            from app.services.system import StartupRecoveryService
+
+            recovery_session = get_session_factory()()
+            try:
+                recovery_summary = StartupRecoveryService(
+                    recovery_session, settings
+                ).reconcile()
+            finally:
+                recovery_session.close()
+            logger.info(
+                "Startup recovery completed",
+                extra={"event": "startup_recovery_completed", **recovery_summary},
+            )
+        except Exception as exc:
+            logger.warning(
+                "Startup recovery failed",
+                extra={"event": "startup_recovery_failed", "error": str(exc)},
+            )
 
         # Initialize LangGraph checkpointer for agent conversations
         if settings.agent_enabled:
@@ -70,6 +90,21 @@ def create_app() -> FastAPI:
         try:
             yield
         finally:
+            try:
+                from app.services.contract_review.executor import (
+                    shutdown_contract_review_executor,
+                )
+                from app.services.opponent_analysis.executor import (
+                    shutdown_opponent_analysis_executor,
+                )
+
+                shutdown_contract_review_executor()
+                shutdown_opponent_analysis_executor()
+            except Exception as exc:
+                logger.warning(
+                    "Background executor shutdown failed",
+                    extra={"event": "executor_shutdown_failed", "error": str(exc)},
+                )
             if settings.agent_enabled:
                 try:
                     from app.services.agent.checkpoint import close_checkpointer

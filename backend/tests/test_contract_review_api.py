@@ -177,7 +177,9 @@ def test_template_upload_duplicate_review_and_export(client, monkeypatch) -> Non
     assert template_upload.status_code == 200
     template_payload = template_upload.json()
     template_id = template_payload["items"][0]["id"]
-    assert template_payload["items"][0]["config_json"]["template_mode"] == "xlsx_checklist"
+    assert (
+        template_payload["items"][0]["config_json"]["template_mode"] == "xlsx_checklist"
+    )
     assert len(template_payload["items"][0]["config_json"]["checklist"]) == 2
 
     duplicate_upload = client.post(

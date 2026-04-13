@@ -186,7 +186,9 @@ class ContractReviewService:
         template = self._get_template(template_id)
         self._get_loader_name_for_upload(file.filename)
         stored_file = self.storage.save_upload(file, "reviews")
-        resolved_review_name = review_name.strip() if review_name else Path(file.filename).stem
+        resolved_review_name = (
+            review_name.strip() if review_name else Path(file.filename).stem
+        )
         template_mode = str(template.config_json.get("template_mode", "legacy"))
         job = ContractReviewJob(
             id=str(uuid4()),
@@ -238,9 +240,7 @@ class ContractReviewService:
         if export_path:
             export_available = self.storage.resolve_relative_path(export_path).exists()
 
-        clause_lookup = {
-            clause.clause_path: clause for clause in job.clauses
-        }
+        clause_lookup = {clause.clause_path: clause for clause in job.clauses}
         return ReviewJobDetailResponse(
             job=self._to_job_item(job),
             template=self._to_template_item(job.template) if job.template else None,
@@ -500,7 +500,9 @@ class ContractReviewService:
         }
 
     @staticmethod
-    def _derive_template_description(parsed_template: ParsedChecklistTemplate) -> str | None:
+    def _derive_template_description(
+        parsed_template: ParsedChecklistTemplate,
+    ) -> str | None:
         if parsed_template.applicability:
             return parsed_template.applicability[0]
         return None

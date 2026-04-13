@@ -14,6 +14,14 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.schemas.answer import AnswerCitation, AnswerResponse
 from app.schemas.search import SearchResultItem
+from app.services.prompts import (
+    PromptSegment,
+    TokenBudget,
+    assemble_prompt_segments,
+    build_answer_json_system_prompt,
+    build_answer_stream_system_prompt,
+    clip_text_to_token_budget,
+)
 from app.services.vectors import DocumentVectorService
 
 logger = logging.getLogger(__name__)
@@ -217,22 +225,11 @@ class DocumentAnswerService:
 
         try:
             for chunk in self._chat_completion_stream_text(
-                system_prompt=(
-                    "你是法律知识库问答助手。"
-                    "你必须严格依据给定来源作答，不能编造法条、案号、事实或结论。"
-                    "请直接输出中文回答正文，不要输出 JSON。"
-                    "需要把引用编号直接放在对应句子后面，格式为 [1][2]。"
-                    "如果信息不足，请明确说明信息不足。"
-                ),
-                user_prompt=(
-                    "用户问题如下：\n"
-                    f"{normalized_query}\n\n"
-                    "可用来源如下：\n"
-                    f"{self._format_sources(sources)}\n\n"
-                    "要求：\n"
-                    "1. 只能使用给定来源编号。\n"
-                    "2. 优先直接回答，再说明依据。\n"
-                    "3. 不要输出与答案无关的前言或解释。\n"
+                system_prompt=self._build_stream_system_prompt(),
+                user_prompt=self._build_answer_user_prompt(
+                    query=normalized_query,
+                    sources=sources,
+                    json_mode=False,
                 ),
             ):
                 if not chunk:
@@ -454,29 +451,11 @@ class DocumentAnswerService:
         sources: Sequence[SearchResultItem],
     ) -> GeneratedAnswerDraft:
         response = self._chat_completion_json(
-            system_prompt=(
-                "你是法律知识库问答助手。"
-                "你必须严格依据给定来源回答，不能编造法条、案号、事实或结论。"
-                "如果来源不足以支撑完整回答，要明确说明信息不足。"
-                "你必须把引用编号直接放在对应句子后面，格式为 [1][2]。"
-                "只输出 JSON。"
-            ),
-            user_prompt=(
-                "用户问题如下：\n"
-                f"{query}\n\n"
-                "可用来源如下：\n"
-                f"{self._format_sources(sources)}\n\n"
-                "请输出 JSON，字段如下：\n"
-                "{"
-                '"answer":"中文回答，必须在对应句子后面添加 [n] 引用编号",'
-                '"used_source_numbers":[1,2],'
-                '"grounding_status":"grounded | partial | insufficient",'
-                '"missing_information":"如果信息不足，简要说明缺失点；否则空字符串"'
-                "}\n\n"
-                "要求：\n"
-                "1. 只能使用给定来源编号。\n"
-                "2. 回答要先给结论，再说明依据。\n"
-                "3. 不要输出 JSON 以外的任何文字。"
+            system_prompt=self._build_json_system_prompt(),
+            user_prompt=self._build_answer_user_prompt(
+                query=query,
+                sources=sources,
+                json_mode=True,
             ),
         )
 
@@ -763,7 +742,12 @@ class DocumentAnswerService:
     def _format_sources(self, sources: Sequence[SearchResultItem]) -> str:
         blocks: list[str] = []
         for index, item in enumerate(sources, start=1):
-            snippet = item.content[: self.settings.answer_generation_max_content_chars]
+            snippet = clip_text_to_token_budget(
+                item.content[: self.settings.answer_generation_max_content_chars],
+                max_tokens=max(
+                    40, self.settings.answer_generation_max_content_chars // 6
+                ),
+            )
             blocks.append(
                 f"[{index}] 文件: {item.original_filename}\n"
                 f"页码: {item.page_number}\n"
@@ -771,6 +755,68 @@ class DocumentAnswerService:
                 f"内容: {snippet}"
             )
         return "\n\n".join(blocks)
+
+    def _build_json_system_prompt(self) -> str:
+        return assemble_prompt_segments(
+            build_answer_json_system_prompt(),
+            TokenBudget(max_input_tokens=500, reserved_output_tokens=120),
+        ).text
+
+    def _build_stream_system_prompt(self) -> str:
+        return assemble_prompt_segments(
+            build_answer_stream_system_prompt(),
+            TokenBudget(max_input_tokens=500, reserved_output_tokens=120),
+        ).text
+
+    def _build_answer_user_prompt(
+        self,
+        *,
+        query: str,
+        sources: Sequence[SearchResultItem],
+        json_mode: bool,
+    ) -> str:
+        if json_mode:
+            requirements = (
+                "请输出 JSON，字段如下：\n"
+                "{"
+                '"answer":"中文回答，必须在对应句子后面添加 [n] 引用编号",'
+                '"used_source_numbers":[1,2],'
+                '"grounding_status":"grounded | partial | insufficient",'
+                '"missing_information":"如果信息不足，简要说明缺失点；否则空字符串"'
+                "}\n\n"
+                "要求：\n"
+                "1. 只能使用给定来源编号。\n"
+                "2. 回答要先给结论，再说明依据。\n"
+                "3. 不要输出 JSON 以外的任何文字。"
+            )
+        else:
+            requirements = (
+                "要求：\n"
+                "1. 只能使用给定来源编号。\n"
+                "2. 优先直接回答，再说明依据。\n"
+                "3. 不要输出与答案无关的前言或解释。\n"
+            )
+        assembly = assemble_prompt_segments(
+            [
+                PromptSegment(
+                    key="question",
+                    version="v1",
+                    content=f"用户问题如下：\n{query}",
+                ),
+                PromptSegment(
+                    key="sources",
+                    version="v1",
+                    content=f"可用来源如下：\n{self._format_sources(sources)}",
+                ),
+                PromptSegment(
+                    key="requirements",
+                    version="v1",
+                    content=requirements,
+                ),
+            ],
+            TokenBudget(max_input_tokens=2200, reserved_output_tokens=500),
+        )
+        return assembly.text
 
     @staticmethod
     def _extract_citation_numbers(answer: str) -> list[int]:

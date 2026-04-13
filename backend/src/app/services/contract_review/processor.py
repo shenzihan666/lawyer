@@ -11,6 +11,7 @@ from app.models import (
     ContractReviewJob,
     ContractReviewJobStatus,
 )
+from app.services.analytics import AnalyticsService
 from app.services.contract_review.analysis import analyze_contract
 from app.services.contract_review.clause_parser import parse_clauses
 from app.services.contract_review.report import build_review_report
@@ -31,6 +32,7 @@ class ContractReviewProcessor:
         self.db = db
         self.settings = settings
         self.storage = ContractReviewStorage(settings)
+        self.analytics = AnalyticsService(db=db, settings=settings)
 
     def run(self, job_id: str) -> None:
         job = self.db.scalar(
@@ -45,15 +47,38 @@ class ContractReviewProcessor:
         if job is None:
             return
 
+        analytics_run = self.analytics.start_run(
+            run_kind="contract_review",
+            resource_type="contract_review_job",
+            resource_id=job_id,
+            metadata={"review_name": job.review_name, "template_id": job.template_id},
+        )
         try:
             job.status = ContractReviewJobStatus.running.value
             job.failure_reason = None
             job.updated_at = utcnow()
             self.db.commit()
+            self.analytics.append_step(
+                analytics_run.id,
+                step_key="load",
+                title="Load review document",
+                status="running",
+            )
 
             file_path = self.storage.resolve_relative_path(job.storage_path)
             load_result = registry.load_document(file_path)
             parsed_clauses = parse_clauses(load_result.fragments)
+            self.analytics.append_step(
+                analytics_run.id,
+                step_key="parse",
+                title="Parse contract clauses",
+                status="done",
+                payload={
+                    "loader_name": load_result.loader_name,
+                    "fragment_count": len(load_result.fragments),
+                    "clause_count": len(parsed_clauses),
+                },
+            )
             template_mode = str(job.template.config_json.get("template_mode", "legacy"))
             if template_mode == "xlsx_checklist":
                 global_rule_prompt = self._get_global_rule_prompt()
@@ -73,6 +98,17 @@ class ContractReviewProcessor:
                     review_name=job.review_name,
                     original_filename=job.original_filename,
                 )
+            self.analytics.append_step(
+                analytics_run.id,
+                step_key="analyze",
+                title="Analyze contract against template",
+                status="done",
+                payload={
+                    "template_mode": template_mode,
+                    "finding_count": len(findings),
+                    "summary": summary,
+                },
+            )
 
             for finding in list(job.findings):
                 self.db.delete(finding)
@@ -144,6 +180,16 @@ class ContractReviewProcessor:
                 "review_engine": "llm" if template_mode == "xlsx_checklist" else "rule",
             }
             self.db.commit()
+            self.analytics.append_step(
+                analytics_run.id,
+                step_key="persist",
+                title="Persist contract review results",
+                status="done",
+                payload={
+                    "finding_count": len(findings),
+                    "clause_count": len(clause_records),
+                },
+            )
 
             refreshed_job = self.db.scalar(
                 select(ContractReviewJob)
@@ -163,11 +209,27 @@ class ContractReviewProcessor:
                 findings=list(refreshed_job.findings),
                 output_path=export_path,
             )
+            self.analytics.append_step(
+                analytics_run.id,
+                step_key="export",
+                title="Build contract review report",
+                status="done",
+                payload={"export_path": export_location},
+            )
 
             refreshed_job.status = ContractReviewJobStatus.completed.value
             refreshed_job.completed_at = utcnow()
             refreshed_job.updated_at = utcnow()
             self.db.commit()
+            self.analytics.finish_run(
+                analytics_run.id,
+                status="completed",
+                summary={
+                    "template_mode": template_mode,
+                    "finding_count": len(findings),
+                    "clause_count": len(parsed_clauses),
+                },
+            )
         except Exception as exc:
             logger.exception(
                 "Contract review job failed",
@@ -184,6 +246,11 @@ class ContractReviewProcessor:
             failed_job.completed_at = utcnow()
             failed_job.updated_at = utcnow()
             self.db.commit()
+            self.analytics.finish_run(
+                analytics_run.id,
+                status="failed",
+                summary={"error": str(exc)},
+            )
 
     def _get_global_rule_prompt(self) -> str:
         from app.models import ContractReviewSetting

@@ -54,9 +54,13 @@ backend/
 - `src/app/schemas/document.py`: request/response contracts
 - `src/app/schemas/answer.py`: chat answer request/response contracts
 - `src/app/services/answers/`: answer generation and citation assembly
+- `src/app/services/analytics/`: centralized telemetry and structured trajectory persistence
 - `src/app/services/opponent_analysis/`: multi-agent workflow orchestration, event persistence, and background execution
+- `src/app/services/governance/`: tool execution policy and audit pipeline
 - `src/app/services/documents/`: document orchestration and upload storage
 - `src/app/services/loaders/`: file-type-specific loader registry and normalization rules
+- `src/app/services/prompts/`: versioned prompt segments and token-budget-aware assembly
+- `src/app/services/system/`: startup recovery and runtime reconciliation
 - `src/app/services/vectors/`: chunking, embeddings, Milvus indexing, and retrieval
 - `src/app/services/cache/`: Redis cache adapter used by vector retrieval
 - `tests/`: API and health verification

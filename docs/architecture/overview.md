@@ -34,6 +34,9 @@ Implemented now:
 - post-retrieval rerank with dedicated endpoint or chat-model fallback
 - single-turn grounded answer generation with inline citations
 - persisted multi-agent opponent prediction runs with event replay and SSE updates
+- centralized analytics and trajectory persistence for tool governance and workflow recovery
+- startup reconciliation for queued or interrupted background jobs
+- versioned prompt segments with token-budget-aware assembly for core agent paths
 
 ## System Flow
 
@@ -56,6 +59,7 @@ Frontend upload UI
 
 - modular backend packages instead of a single flat file
 - traceable ingestion with file path, hash, timestamps, and soft delete state
+- centralized governance, analytics, and recovery services for long-running agent workflows
 - local development should work without production infra
 - production direction should align with PostgreSQL + Milvus
 - docs should help AI agents discover the right code area quickly

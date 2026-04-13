@@ -66,7 +66,8 @@ def parse_checklist_template(file_path: Path) -> ParsedChecklistTemplate:
                 ParsedChecklistItem(
                     key=str(current_item["key"]),
                     title=title,
-                    risk_level=str(current_item.get("risk_level", "")).strip() or "未标注",
+                    risk_level=str(current_item.get("risk_level", "")).strip()
+                    or "未标注",
                     description="\n".join(
                         line
                         for line in current_item.get("description_lines", [])
@@ -119,7 +120,9 @@ def parse_checklist_template(file_path: Path) -> ParsedChecklistTemplate:
             append_source_line(label, value)
             if field == "title":
                 existing = str(current_item.get("title", "")).strip()
-                current_item["title"] = f"{existing} {value}".strip() if existing else value
+                current_item["title"] = (
+                    f"{existing} {value}".strip() if existing else value
+                )
                 return
             if field == "risk_level":
                 existing = str(current_item.get("risk_level", "")).strip()

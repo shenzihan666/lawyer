@@ -87,6 +87,29 @@ src/app/
 - structured event persistence for board playback
 - background execution plus SSE stream snapshots
 
+### `services/analytics/`
+
+- centralized structured analytics event writes
+- trajectory run and step persistence for system-level execution traces
+- shared telemetry API for governance, recovery, and background workflows
+
+### `services/governance/`
+
+- host-side tool execution policy checks
+- request sanitization and allowlist enforcement
+- audit trail before and after sensitive tool execution
+
+### `services/prompts/`
+
+- versioned prompt segments
+- token-budget-aware prompt assembly helpers
+- shared prompt catalog used by agent, answer, contract review, and analysis flows
+
+### `services/system/`
+
+- startup recovery and reconciliation for queued/running background jobs
+- executor lifecycle cleanup hooks for process restarts and shutdown
+
 ## Storage Model
 
 ### Relational metadata
