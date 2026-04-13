@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lawyer 项目使用教程</title>
+    <style>
+      :root {
+        --bg: #f7f7f9;
+        --card: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #3158ff;
+        --line: #e5e7eb;
+        --ok: #166534;
+        --warn: #b45309;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+        color: var(--text);
+        background: radial-gradient(circle at top right, #eef2ff, var(--bg) 40%);
+        line-height: 1.65;
+      }
+      .container {
+        max-width: 980px;
+        margin: 0 auto;
+      }
+      h1,
+      h2,
+      h3 {
+        margin-top: 1.2em;
+        margin-bottom: 0.5em;
+      }
+      h1 {
+        margin-top: 0;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 18px 20px;
+        margin: 16px 0;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .ok {
+        color: var(--ok);
+      }
+      .warn {
+        color: var(--warn);
+      }
+      code {
+        background: #f3f4f6;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        padding: 2px 6px;
+        font-family: "Consolas", "Courier New", monospace;
+      }
+      pre {
+        margin: 10px 0;
+        padding: 12px 14px;
+        border-radius: 10px;
+        overflow-x: auto;
+        background: #111827;
+        color: #e5e7eb;
+      }
+      .grid {
+        display: grid;
+        gap: 14px;
+      }
+      @media (min-width: 900px) {
+        .grid-2 {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      ul {
+        margin: 8px 0;
+        padding-left: 18px;
+      }
+      .tag {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid #c7d2fe;
+        color: #3730a3;
+        background: #eef2ff;
+        font-size: 12px;
+        margin-right: 8px;
+      }
+      .toc a {
+        text-decoration: none;
+        color: var(--primary);
+      }
+      .toc li {
+        margin: 6px 0;
+      }
+      .footer {
+        margin: 32px 0 10px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Lawyer 项目使用教程</h1>
+      <p class="muted">
+        适用仓库：<code>D:\Project\lawyer</code>。本教程覆盖本地开发、云端部署、离线镜像、向量化配置和常见问题排查。
+      </p>
+
+      <div class="card">
+        <span class="tag">Frontend</span>
+        <span class="tag">Nuxt 4 + Vue 3</span>
+        <span class="tag">Backend</span>
+        <span class="tag">FastAPI + Python 3.13</span>
+        <span class="tag">Vector</span>
+        <span class="tag">Milvus + Redis</span>
+      </div>
+
+      <div class="card toc">
+        <h2>目录</h2>
+        <ul>
+          <li><a href="#requirements">1. 环境准备</a></li>
+          <li><a href="#local">2. 本地启动</a></li>
+          <li><a href="#cloud">3. 云端部署（不编译前端）</a></li>
+          <li><a href="#docker-offline">4. Docker 依赖离线导入</a></li>
+          <li><a href="#env">5. 核心环境变量</a></li>
+          <li><a href="#embedding">6. 切换 Embedding 模型</a></li>
+          <li><a href="#troubleshoot">7. 常见报错排查</a></li>
+        </ul>
+      </div>
+
+      <div class="card" id="requirements">
+        <h2>1. 环境准备</h2>
+        <ul>
+          <li>Node.js 20+（建议配合 <code>pnpm</code>）</li>
+          <li>Python 3.13（建议配合 <code>uv</code>）</li>
+          <li>Docker + Docker Compose（PostgreSQL / Redis / Milvus）</li>
+          <li>可用的 Embedding API Key（如 SiliconFlow）</li>
+        </ul>
+      </div>
+
+      <div class="card" id="local">
+        <h2>2. 本地启动</h2>
+        <h3>2.1 启动基础依赖</h3>
+        <pre><code>docker compose up -d postgres redis etcd minio standalone attu</code></pre>
+
+        <h3>2.2 启动后端</h3>
+        <pre><code>uv sync --directory backend --group dev
+cd backend
+cp .env.example .env
+uv run backend</code></pre>
+
+        <h3>2.3 启动前端</h3>
+        <pre><code>pnpm install --dir frontend
+pnpm --dir frontend dev</code></pre>
+
+        <p class="ok">
+          默认访问：前端 <code>http://127.0.0.1:3000</code>，后端
+          <code>http://127.0.0.1:8000</code>。
+        </p>
+      </div>
+
+      <div class="card" id="cloud">
+        <h2>3. 云端部署（不编译前端）</h2>
+        <p>如果云端 <code>pnpm build</code> 卡住，可以用本地打包好的 <code>.output</code> 直接部署。</p>
+        <pre><code># 服务器上
+mkdir -p ~/lawyer/frontend-prebuilt
+cd ~/lawyer/frontend-prebuilt
+unzip frontend-output-20260406.zip
+
+cd server
+export HOST=0.0.0.0
+export PORT=3000
+export NUXT_PUBLIC_API_BASE="http://你的服务器IP:8000/api/v1"
+node index.mjs</code></pre>
+
+        <h3>后端云端启动建议</h3>
+        <pre><code>cd ~/lawyer/backend
+export FRONTEND_ORIGINS="http://你的服务器IP:3000,http://localhost:3000,http://127.0.0.1:3000"
+export AGENT_ENABLED=false
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000</code></pre>
+      </div>
+
+      <div class="card" id="docker-offline">
+        <h2>4. Docker 依赖离线导入</h2>
+        <p>云端无法拉镜像时，用本地导出的 tar 包导入：</p>
+        <pre><code>docker load -i lawyer-infra-images-20260406.tar
+docker compose up -d postgres redis etcd minio standalone attu</code></pre>
+        <p>包含镜像：<code>postgres:16</code>、<code>redis:7-alpine</code>、<code>milvusdb/milvus:v2.5.14</code> 等。</p>
+      </div>
+
+      <div class="card" id="env">
+        <h2>5. 核心环境变量</h2>
+        <div class="grid grid-2">
+          <div>
+            <h3>后端常用</h3>
+            <pre><code>DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5433/lawyer
+FRONTEND_ORIGINS=http://127.0.0.1:3000,http://localhost:3000
+MILVUS_URI=http://127.0.0.1:19530
+REDIS_URL=redis://127.0.0.1:6379/0</code></pre>
+          </div>
+          <div>
+            <h3>前端常用</h3>
+            <pre><code>NUXT_PUBLIC_API_BASE=http://127.0.0.1:8000/api/v1</code></pre>
+            <p class="warn">云端必须改成服务器可访问地址，不要写 127.0.0.1（除非前后端同端口代理）。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="embedding">
+        <h2>6. 切换 Embedding 模型</h2>
+        <p>当前项目支持切换，但需要保证 <code>VECTOR_DENSE_DIMENSION</code> 与模型真实输出维度一致。</p>
+        <pre><code># 例：Qwen/Qwen3-Embedding-8B（4096维）
+EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
+EMBEDDING_API_KEY=sk-xxxxxxxx
+EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B
+VECTOR_DENSE_DIMENSION=4096
+VECTOR_SPARSE_DIMENSION=262144</code></pre>
+        <p>
+          切换维度后建议重建向量索引（Milvus 集合结构里 dense 维度是固定字段）。
+        </p>
+      </div>
+
+      <div class="card" id="troubleshoot">
+        <h2>7. 常见报错排查</h2>
+        <h3>A. 浏览器提示 <code>Failed to fetch</code></h3>
+        <ul>
+          <li>检查前端是否把 API 指向了错误地址（常见误写 <code>127.0.0.1</code>）。</li>
+          <li>检查后端 CORS：<code>FRONTEND_ORIGINS</code> 是否包含前端真实域名/端口。</li>
+          <li>检查安全组和端口放行（3000/8000）。</li>
+        </ul>
+
+        <h3>B. 后端日志显示 <code>Uvicorn running on 127.0.0.1</code></h3>
+        <p>说明只监听了回环地址。请改为：</p>
+        <pre><code>uv run uvicorn app.main:app --host 0.0.0.0 --port 8000</code></pre>
+
+        <h3>C. 向量化失败：<code>HTTP 403 balance is insufficient</code></h3>
+        <p>
+          这是 Embedding 供应商账户余额不足，不是代码 bug。充值或更换可用 API Key 后重试。
+        </p>
+      </div>
+
+      <p class="footer">
+        文档文件：<code>docs/operations/usage-tutorial.html</code>。可直接双击在浏览器中打开。
+      </p>
+    </div>
+  </body>
+</html>

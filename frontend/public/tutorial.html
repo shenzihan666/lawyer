@@ -1,0 +1,1528 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>法律智能辅助系统 - 完整使用教程</title>
+    <style>
+      :root {
+        --primary: #6366f1;
+        --primary-dark: #4f46e5;
+        --primary-light: #e0e7ff;
+        --bg: #f8fafc;
+        --surface: #ffffff;
+        --text: #1e293b;
+        --text-secondary: #64748b;
+        --border: #e2e8f0;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --radius: 12px;
+        --shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+        --shadow-lg:
+          0 10px 15px -3px rgba(0, 0, 0, 0.1),
+          0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.7;
+      }
+
+      .hero {
+        background: linear-gradient(
+          135deg,
+          #4f46e5 0%,
+          #7c3aed 50%,
+          #a855f7 100%
+        );
+        color: white;
+        padding: 80px 20px 60px;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .hero::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      }
+
+      .hero-content {
+        position: relative;
+        z-index: 1;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      .hero h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 16px;
+        letter-spacing: -0.025em;
+      }
+      .hero .subtitle {
+        font-size: 1.125rem;
+        opacity: 0.9;
+        margin-bottom: 24px;
+      }
+      .hero .badge {
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        padding: 8px 20px;
+        border-radius: 50px;
+        font-size: 0.875rem;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+      }
+
+      .toc {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 20px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        box-shadow: var(--shadow);
+      }
+
+      .toc-inner {
+        max-width: 1000px;
+        margin: 0 auto;
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .toc-inner::-webkit-scrollbar {
+        display: none;
+      }
+      .toc a {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 0.875rem;
+        white-space: nowrap;
+        transition: all 0.2s;
+      }
+      .toc a:hover {
+        background: var(--primary-light);
+        color: var(--primary);
+        border-color: var(--primary);
+      }
+      .toc a .num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        background: var(--primary);
+        color: white;
+        border-radius: 50%;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 40px 20px 80px;
+      }
+
+      .section {
+        margin-bottom: 60px;
+        scroll-margin-top: 80px;
+      }
+      .section-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 24px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid var(--primary);
+      }
+      .section-num {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        background: var(--primary);
+        color: white;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 1rem;
+        flex-shrink: 0;
+      }
+      .section h2 {
+        font-size: 1.5rem;
+        font-weight: 700;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 24px;
+        margin-bottom: 20px;
+        box-shadow: var(--shadow);
+      }
+      .card h3 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin-bottom: 12px;
+      }
+      .card p {
+        color: var(--text-secondary);
+        margin-bottom: 12px;
+      }
+
+      .step {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 24px;
+        padding: 20px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+      .step-num {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        background: var(--primary);
+        color: white;
+        border-radius: 50%;
+        font-weight: 700;
+        font-size: 0.875rem;
+        flex-shrink: 0;
+        margin-top: 2px;
+      }
+      .step-content h4 {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .step-content p {
+        color: var(--text-secondary);
+        font-size: 0.9375rem;
+      }
+
+      .screenshot {
+        margin: 20px 0;
+        border-radius: var(--radius);
+        overflow: hidden;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-lg);
+      }
+      .screenshot img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      .screenshot-caption {
+        background: var(--bg);
+        padding: 10px 16px;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        text-align: center;
+        border-top: 1px solid var(--border);
+      }
+
+      .highlight {
+        background: linear-gradient(
+          135deg,
+          var(--primary-light) 0%,
+          #f0e7ff 100%
+        );
+        border: 1px solid #c7d2fe;
+        border-radius: var(--radius);
+        padding: 20px 24px;
+        margin: 20px 0;
+      }
+      .highlight p {
+        color: #3730a3;
+        font-weight: 500;
+      }
+      .highlight strong {
+        color: var(--primary-dark);
+      }
+
+      .warning {
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        border-radius: var(--radius);
+        padding: 16px 20px;
+        margin: 16px 0;
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      .warning-icon {
+        font-size: 1.25rem;
+        flex-shrink: 0;
+      }
+      .warning p {
+        color: #92400e;
+        font-size: 0.9375rem;
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin: 20px 0;
+      }
+      .feature-item {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 20px;
+        text-align: center;
+        transition: all 0.2s;
+      }
+      .feature-item:hover {
+        border-color: var(--primary);
+        box-shadow: var(--shadow-lg);
+        transform: translateY(-2px);
+      }
+      .feature-icon {
+        font-size: 2rem;
+        margin-bottom: 12px;
+      }
+      .feature-item h4 {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .feature-item p {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        margin: 20px 0;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9375rem;
+      }
+      th {
+        background: var(--bg);
+        padding: 12px 16px;
+        text-align: left;
+        font-weight: 600;
+        color: var(--text-secondary);
+        border-bottom: 2px solid var(--border);
+      }
+      td {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+
+      .tag {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+      .tag-blue {
+        background: #dbeafe;
+        color: #1d4ed8;
+      }
+      .tag-green {
+        background: #d1fae5;
+        color: #065f46;
+      }
+      .tag-yellow {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .tag-red {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      .tag-purple {
+        background: #ede9fe;
+        color: #5b21b6;
+      }
+
+      code {
+        background: #f1f5f9;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.875rem;
+        color: #e11d48;
+        font-family: "SF Mono", "Fira Code", monospace;
+      }
+
+      ul.checklist {
+        list-style: none;
+        padding: 0;
+      }
+      ul.checklist li {
+        padding: 8px 0 8px 28px;
+        position: relative;
+        color: var(--text-secondary);
+      }
+      ul.checklist li::before {
+        content: "\2713";
+        position: absolute;
+        left: 0;
+        color: var(--success);
+        font-weight: 700;
+      }
+
+      .footer {
+        background: var(--text);
+        color: #94a3b8;
+        text-align: center;
+        padding: 40px 20px;
+        font-size: 0.875rem;
+      }
+      .footer a {
+        color: #a5b4fc;
+        text-decoration: none;
+      }
+
+      .flow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin: 24px 0;
+      }
+      .flow-step {
+        background: var(--surface);
+        border: 2px solid var(--primary);
+        border-radius: 10px;
+        padding: 12px 18px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--primary);
+        text-align: center;
+      }
+      .flow-arrow {
+        color: var(--primary);
+        font-size: 1.25rem;
+      }
+
+      .tabs-visual {
+        display: flex;
+        gap: 4px;
+        margin: 16px 0;
+      }
+      .tab-item {
+        padding: 8px 16px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px 8px 0 0;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+      }
+      .tab-item.active {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+      }
+
+      .page-nav {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        margin: 24px 0;
+      }
+      .page-nav-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        text-decoration: none;
+        color: var(--text);
+        transition: all 0.2s;
+      }
+      .page-nav-item:hover {
+        border-color: var(--primary);
+        box-shadow: var(--shadow-lg);
+        transform: translateY(-2px);
+      }
+      .page-nav-icon {
+        font-size: 1.75rem;
+      }
+      .page-nav-text h4 {
+        font-size: 0.9375rem;
+        font-weight: 600;
+      }
+      .page-nav-text p {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        margin: 0;
+      }
+
+      .sub-section {
+        margin: 24px 0;
+      }
+      .sub-section h3 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      @media (max-width: 640px) {
+        .hero h1 {
+          font-size: 1.75rem;
+        }
+        .hero .subtitle {
+          font-size: 1rem;
+        }
+        .step {
+          flex-direction: column;
+          gap: 12px;
+        }
+        .feature-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .page-nav {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero-content">
+        <span class="badge">📖 完整使用教程</span>
+        <h1>法律智能辅助系统</h1>
+        <p class="subtitle">
+          AI-Powered Legal Assistant — 知识库 · 类案检索 · 合同审查 ·
+          对方观点预判 · 法律问答
+        </p>
+      </div>
+    </header>
+
+    <nav class="toc">
+      <div class="toc-inner">
+        <a href="#overview"><span class="num">1</span> 系统概览</a>
+        <a href="#layout"><span class="num">2</span> 通用布局</a>
+        <a href="#chat"><span class="num">3</span> 法律问答</a>
+        <a href="#documents"><span class="num">4</span> 知识库</a>
+        <a href="#search"><span class="num">5</span> 类案检索</a>
+        <a href="#contract"><span class="num">6</span> 合同审查</a>
+        <a href="#opponent"><span class="num">7</span> 对方观点预判</a>
+        <a href="#sessions"><span class="num">8</span> 会话管理</a>
+        <a href="#faq"><span class="num">9</span> 常见问题</a>
+      </div>
+    </nav>
+
+    <main class="container">
+      <section class="section" id="overview">
+        <div class="section-header">
+          <span class="section-num">1</span>
+          <h2>系统概览</h2>
+        </div>
+
+        <div class="card">
+          <h3>系统简介</h3>
+          <p>
+            法律智能辅助系统是一个基于 AI
+            多智能体架构的法律工作平台，集成了知识库管理、类案检索、合同审查、对方观点预判和法律问答五大核心功能模块，帮助法律从业者高效完成案件准备和法律分析工作。
+          </p>
+          <div class="highlight">
+            <p>
+              💡
+              <strong>核心优势</strong
+              >：所有模块共享统一的知识库，上传一次文档即可在所有功能中使用，形成完整的法律工作闭环。
+            </p>
+          </div>
+        </div>
+
+        <div class="feature-grid">
+          <div class="feature-item">
+            <div class="feature-icon">💬</div>
+            <h4>法律问答</h4>
+            <p>自然语言提问，AI 基于知识库回答并附引用</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">📚</div>
+            <h4>知识库</h4>
+            <p>上传 PDF/Word/Excel 文档，自动索引管理</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🔍</div>
+            <h4>类案检索</h4>
+            <p>输入案情关键词，检索相似案例与裁判规则</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">📝</div>
+            <h4>合同审查</h4>
+            <p>上传合同文件，智能识别风险条款与修改建议</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🎯</div>
+            <h4>对方观点预判</h4>
+            <p>多智能体接力推演，预测对方庭审策略与主张</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>系统工作流程</h3>
+          <div class="flow">
+            <div class="flow-step">📄 上传文档到知识库</div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">🔍 按需检索/审查</div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">💬 问答获取建议</div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">🎯 预判对方策略</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>五大功能模块快速导航</h3>
+          <div class="page-nav">
+            <a href="#chat" class="page-nav-item">
+              <span class="page-nav-icon">💬</span>
+              <div class="page-nav-text">
+                <h4>法律问答</h4>
+                <p>/chat</p>
+              </div>
+            </a>
+            <a href="#documents" class="page-nav-item">
+              <span class="page-nav-icon">📚</span>
+              <div class="page-nav-text">
+                <h4>知识库</h4>
+                <p>/documents</p>
+              </div>
+            </a>
+            <a href="#search" class="page-nav-item">
+              <span class="page-nav-icon">🔍</span>
+              <div class="page-nav-text">
+                <h4>类案检索</h4>
+                <p>/search</p>
+              </div>
+            </a>
+            <a href="#contract" class="page-nav-item">
+              <span class="page-nav-icon">📝</span>
+              <div class="page-nav-text">
+                <h4>合同审查</h4>
+                <p>/contract-review</p>
+              </div>
+            </a>
+            <a href="#opponent" class="page-nav-item">
+              <span class="page-nav-icon">🎯</span>
+              <div class="page-nav-text">
+                <h4>对方观点预判</h4>
+                <p>/opponent-analysis</p>
+              </div>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="layout">
+        <div class="section-header">
+          <span class="section-num">2</span>
+          <h2>通用布局与导航</h2>
+        </div>
+
+        <div class="card">
+          <h3>页面布局</h3>
+          <p>系统所有页面采用统一的三栏布局，确保操作体验一致：</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>区域</th>
+                  <th>功能</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="tag tag-blue">左侧栏</span></td>
+                  <td>导航与会话管理</td>
+                  <td>新对话按钮、会话记录列表、功能导航链接</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-green">主内容区</span></td>
+                  <td>核心功能操作</td>
+                  <td>根据当前模块显示不同的操作面板和结果</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-purple">辅助面板</span></td>
+                  <td>配置与结果展示</td>
+                  <td>检索设置、文档范围选择、历史记录等</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>功能导航栏</h3>
+          <p>左侧导航栏提供四个核心功能模块的快速切换：</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>导航项</th>
+                  <th>路径</th>
+                  <th>功能</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>知识库</td>
+                  <td><code>/documents</code></td>
+                  <td>管理已上传和索引的法律文档</td>
+                </tr>
+                <tr>
+                  <td>类案检索</td>
+                  <td><code>/search</code></td>
+                  <td>检索相似案例作为参考</td>
+                </tr>
+                <tr>
+                  <td>合同审查</td>
+                  <td><code>/contract-review</code></td>
+                  <td>智能合同条款审查与分析</td>
+                </tr>
+                <tr>
+                  <td>对方观点预判</td>
+                  <td><code>/opponent-analysis</code></td>
+                  <td>多智能体推演对方观点</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="chat">
+        <div class="section-header">
+          <span class="section-num">3</span>
+          <h2>法律问答</h2>
+        </div>
+
+        <div class="card">
+          <h3>功能说明</h3>
+          <p>
+            法律问答是系统的首页默认功能（路径
+            <code>/chat</code>）。你可以用自然语言提出任何法律问题，AI
+            会基于已索引的知识库文档进行检索和分析，给出带有引用依据的专业回答。
+          </p>
+          <div class="highlight">
+            <p>
+              💡
+              <strong>核心特点</strong
+              >：回答不是凭空生成，而是基于知识库中的真实文档进行检索后给出，每一条回答都附带引用来源。
+            </p>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <h3>📋 使用步骤</h3>
+
+          <div class="step">
+            <span class="step-num">1</span>
+            <div class="step-content">
+              <h4>输入法律问题</h4>
+              <p>在底部输入框中输入你的法律问题。例如：</p>
+              <ul class="checklist">
+                <li>房屋被他人占有时，我应如何主张返还原物？</li>
+                <li>合同违约责任通常需要满足哪些认定条件？</li>
+                <li>劳动争议中，用人单位单方解除合同需要哪些依据？</li>
+              </ul>
+              <p>输入框提示：<code>Enter 发送，Shift + Enter 换行</code></p>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-num">2</span>
+            <div class="step-content">
+              <h4>配置检索范围（可选）</h4>
+              <p>在左侧辅助面板中，你可以调整检索设置：</p>
+              <ul class="checklist">
+                <li>
+                  <strong>参考来源数量</strong>：下拉选择检索条数（默认 5 条）
+                </li>
+                <li>
+                  <strong>限定文档范围</strong
+                  >：勾选特定文档或点击「全选」使用全部文档
+                </li>
+                <li>
+                  <strong>当前范围</strong>：显示当前检索范围（全部已索引文档 /
+                  指定文档）
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-num">3</span>
+            <div class="step-content">
+              <h4>查看回答与引用</h4>
+              <p>发送问题后，系统会按聊天流逐步展示：</p>
+              <ul class="checklist">
+                <li>你的提问</li>
+                <li>AI 的检索步骤和过程</li>
+                <li>结构化的回答文本</li>
+                <li>引用的文档来源和依据</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>界面截图</h3>
+          <div class="screenshot">
+            <img src="homepage.png" alt="法律问答页面截图" />
+            <div class="screenshot-caption">
+              ▲ 法律问答页面：输入问题 → 查看带引用的 AI 回答
+            </div>
+          </div>
+        </div>
+
+        <div class="warning">
+          <span class="warning-icon">💡</span>
+          <p>
+            <strong>提示</strong>：首页默认跳转到
+            <code>/chat</code>
+            页面。确保已上传相关文档到知识库，回答质量会更好。
+          </p>
+        </div>
+      </section>
+
+      <section class="section" id="documents">
+        <div class="section-header">
+          <span class="section-num">4</span>
+          <h2>知识库</h2>
+        </div>
+
+        <div class="card">
+          <h3>功能说明</h3>
+          <p>
+            知识库（路径
+            <code>/documents</code
+            >）是整个系统的数据基础。在这里上传、管理和索引法律文档，所有其他功能模块都依赖知识库中的文档进行分析。
+          </p>
+          <div class="highlight">
+            <p>
+              💡
+              <strong>支持格式</strong
+              >：PDF（按页拆分索引）、Word（全文索引）、Excel（规范化索引）
+            </p>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <h3>📤 上传文档</h3>
+
+          <div class="step">
+            <span class="step-num">1</span>
+            <div class="step-content">
+              <h4>选择上传方式</h4>
+              <p>在知识库页面，你可以通过以下方式上传文档：</p>
+              <ul class="checklist">
+                <li>点击上传按钮选择本地文件</li>
+                <li>支持批量上传多个文件</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-num">2</span>
+            <div class="step-content">
+              <h4>等待索引处理</h4>
+              <p>上传后系统会自动处理文档：</p>
+              <ul class="checklist">
+                <li>PDF 文件按页面拆分，每页作为独立索引单元</li>
+                <li>Word 文件全文作为一个索引单元</li>
+                <li>Excel 文件规范化后索引</li>
+                <li>处理完成后文档状态变为「已索引」</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <h3>📋 文档管理</h3>
+
+          <div class="step">
+            <span class="step-num">1</span>
+            <div class="step-content">
+              <h4>查看文档列表</h4>
+              <p>文档列表展示所有已上传的文档，包含：</p>
+              <ul class="checklist">
+                <li>文档名称</li>
+                <li>文件格式（PDF/Word/Excel）</li>
+                <li>页数</li>
+                <li>索引状态</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-num">2</span>
+            <div class="step-content">
+              <h4>批量操作</h4>
+              <p>文档列表支持批量管理：</p>
+              <ul class="checklist">
+                <li><strong>全选/取消全选</strong>：一键选中所有文档</li>
+                <li><strong>批量删除</strong>：删除选中的文档及其索引</li>
+                <li><strong>批量向量化</strong>：将选中文档加入向量处理队列</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>界面截图</h3>
+          <div class="screenshot">
+            <img src="documents.png" alt="知识库页面截图" />
+            <div class="screenshot-caption">
+              ▲ 知识库页面：上传文档 → 查看列表 → 批量管理
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>文档处理规则</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>格式</th>
+                  <th>处理方式</th>
+                  <th>索引单元</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="tag tag-red">PDF</span></td>
+                  <td>PyPDFLoader 按页拆分</td>
+                  <td>每页一个独立文档</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-blue">Word</span></td>
+                  <td>Docx2txtLoader 全文提取</td>
+                  <td>全文作为一个文档（page=0）</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-green">Excel</span></td>
+                  <td>UnstructuredExcelLoader 规范化</td>
+                  <td>规范化后索引（page=0）</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="search">
+        <div class="section-header">
+          <span class="section-num">5</span>
+          <h2>类案检索</h2>
+        </div>
+
+        <div class="card">
+          <h3>功能说明</h3>
+          <p>
+            类案检索（路径
+            <code>/search</code
+            >）帮助你快速找到与当前案件相似的已有案例和裁判规则，为案件分析提供参考依据。
+          </p>
+          <div class="highlight">
+            <p>
+              💡
+              <strong>使用场景</strong
+              >：了解类似案件的裁判倾向、法律依据和判决结果，辅助制定诉讼策略。
+            </p>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <h3>🔍 使用步骤</h3>
+
+          <div class="step">
+            <span class="step-num">1</span>
+            <div class="step-content">
+              <h4>输入检索关键词</h4>
+              <p>在搜索框中输入与案件相关的关键词或案情描述，例如：</p>
+              <ul class="checklist">
+                <li>案由类型（如「劳动争议」「离婚财产分割」）</li>
+                <li>争议焦点（如「违法分包」「工伤认定」）</li>
+                <li>法律概念（如「夫妻共同债务」「彩礼返还」）</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-num">2</span>
+            <div class="step-content">
+              <h4>配置检索参数</h4>
+              <p>根据需要调整检索设置：</p>
+              <ul class="checklist">
+                <li><strong>检索条数</strong>：控制返回结果数量</li>
+                <li><strong>文档范围</strong>：选择全部文档或指定文档子集</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-num">3</span>
+            <div class="step-content">
+              <h4>查看检索结果</h4>
+              <p>系统返回匹配的案例和文档片段，包含：</p>
+              <ul class="checklist">
+                <li>匹配的文档/案例标题</li>
+                <li>相关段落内容</li>
+                <li>来源文档信息</li>
+                <li>相关性评分或排序</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>界面截图</h3>
+          <div class="screenshot">
+            <img src="search.png" alt="类案检索页面截图" />
+            <div class="screenshot-caption">
+              ▲ 类案检索页面：输入关键词 → 检索相似案例 → 查看结果
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="contract">
+        <div class="section-header">
+          <span class="section-num">6</span>
+          <h2>合同审查</h2>
+        </div>
+
+        <div class="card">
+          <h3>功能说明</h3>
+          <p>
+            合同审查（路径 <code>/contract-review</code>）利用 AI
+            智能分析合同条款，识别潜在风险、不合理约定和缺失条款，并提供修改建议。
+          </p>
+          <div class="highlight">
+            <p>
+              💡
+              <strong>核心价值</strong
+              >：快速发现合同中的风险点，避免签署不利条款，保护当事人合法权益。
+            </p>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <h3>📝 使用步骤</h3>
+
+          <div class="step">
+            <span class="step-num">1</span>
+            <div class="step-content">
+              <h4>上传合同文件</h4>
+              <p>将需要审查的合同文件上传到系统。支持 PDF、Word 等常见格式。</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-num">2</span>
+            <div class="step-content">
+              <h4>配置审查参数</h4>
+              <p>设置审查相关的参数：</p>
+              <ul class="checklist">
+                <li><strong>检索条数</strong>：参考的法律文档数量</li>
+                <li><strong>文档范围</strong>：选择参考的法律文档子集</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-num">3</span>
+            <div class="step-content">
+              <h4>查看审查结果</h4>
+              <p>AI 会输出详细的审查报告，通常包括：</p>
+              <ul class="checklist">
+                <li>风险条款识别与标注</li>
+                <li>不合理约定分析</li>
+                <li>缺失条款提醒</li>
+                <li>具体修改建议</li>
+                <li>法律依据引用</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>界面截图</h3>
+          <div class="screenshot">
+            <img src="contract-review.png" alt="合同审查页面截图" />
+            <div class="screenshot-caption">
+              ▲ 合同审查页面：上传合同 → 配置参数 → 获取审查报告
+            </div>
+          </div>
+        </div>
+
+        <div class="warning">
+          <span class="warning-icon">⚠️</span>
+          <p>
+            <strong>注意</strong>：AI
+            审查结果仅供参考，重要合同建议结合专业律师的人工审查。
+          </p>
+        </div>
+      </section>
+
+      <section class="section" id="opponent">
+        <div class="section-header">
+          <span class="section-num">7</span>
+          <h2>对方观点预判</h2>
+        </div>
+
+        <div class="card">
+          <h3>功能说明</h3>
+          <p>
+            对方观点预判（路径
+            <code>/opponent-analysis</code
+            >）是系统最强大的功能之一。基于多智能体接力推演，自动预测对方在庭审中可能提出的观点、主张和行为策略。
+          </p>
+          <div class="highlight">
+            <p>
+              💡
+              <strong>核心机制</strong
+              >：按四角编排接力推演，把全过程沉淀为可追流、可回放的事件时间线。
+            </p>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <h3>🚀 发起预测</h3>
+
+          <div class="step">
+            <span class="step-num">1</span>
+            <div class="step-content">
+              <h4>输入案情摘要</h4>
+              <p>在「案情摘要」文本框中输入案件关键事实，建议包含：</p>
+              <ul class="checklist">
+                <li>争议焦点与核心法律关系</li>
+                <li>关键时间线与事件经过</li>
+                <li>涉及金额与标的</li>
+                <li>证据缺口与待补充材料</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-num">2</span>
+            <div class="step-content">
+              <h4>选择检索条数与文档范围</h4>
+              <p>设置推演参考的文档数量和范围：</p>
+              <ul class="checklist">
+                <li>通过下拉菜单选择检索条数（默认 5 条）</li>
+                <li>勾选需要参考的文档，或使用「全选」/「清空」快速操作</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="step-num">3</span>
+            <div class="step-content">
+              <h4>点击「发起预测」</h4>
+              <p>确认信息无误后点击按钮，系统自动执行多智能体推演流程。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <h3>📊 查看推演结果</h3>
+
+          <div class="card">
+            <h3>四大结果模块</h3>
+            <div class="tabs-visual">
+              <div class="tab-item active">预测总览</div>
+              <div class="tab-item">多智能体过程</div>
+              <div class="tab-item">话术与行为</div>
+              <div class="tab-item">证据依据</div>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>模块</th>
+                  <th>内容</th>
+                  <th>使用场景</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="tag tag-blue">预测总览</span></td>
+                  <td>
+                    对方立场、风险等级、置信度、三条主张、庭审动作、准备事项、证据清单
+                  </td>
+                  <td>快速了解全局，制定应对策略</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-purple">多智能体过程</span></td>
+                  <td>各 AI 智能体的推演过程、推理链条和协作记录</td>
+                  <td>深入了解推演逻辑，验证结论可靠性</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-green">话术与行为</span></td>
+                  <td>对方可能使用的具体话术、表达方式和行为模式</td>
+                  <td>模拟庭审对话，提前准备应答</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-yellow">证据依据</span></td>
+                  <td>推演结论所依据的具体文档片段、法律条文和判例引用</td>
+                  <td>核实推演依据，补充证据链</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <h3>📈 关键指标解读</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>指标</th>
+                  <th>含义</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="tag tag-yellow">风险等级</span></td>
+                  <td>低 / 中 / 高 — 本案综合风险评估</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-blue">律师置信度</span></td>
+                  <td>AI 律师智能体对推演结果的信心百分比</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-green">当事人置信度</span></td>
+                  <td>AI 当事人智能体对推演结果的信心百分比</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-purple">实际证据</span></td>
+                  <td>系统从已索引文档中找到的相关证据条数</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>界面截图</h3>
+          <div class="screenshot">
+            <img src="section-launch.png" alt="对方观点预判页面截图" />
+            <div class="screenshot-caption">
+              ▲ 对方观点预判页面：输入案情 → 选择文档 → 发起多智能体推演 →
+              查看结果
+            </div>
+          </div>
+        </div>
+
+        <div class="warning">
+          <span class="warning-icon">⚠️</span>
+          <p>
+            <strong>重要声明</strong
+            >：页面只展示预测、可能与建议，不把推演结果包装成事实。所有结果仅供参考，不构成法律意见。
+          </p>
+        </div>
+      </section>
+
+      <section class="section" id="sessions">
+        <div class="section-header">
+          <span class="section-num">8</span>
+          <h2>会话管理</h2>
+        </div>
+
+        <div class="card">
+          <h3>通用会话管理</h3>
+          <p>
+            所有功能模块共享统一的会话管理系统，位于左侧栏的「会话记录」区域。
+          </p>
+        </div>
+
+        <div class="step">
+          <span class="step-num">1</span>
+          <div class="step-content">
+            <h4>新对话</h4>
+            <p>
+              点击左上角的
+              <strong>「新对话」</strong>
+              按钮，创建新的会话。这会清空当前编辑区，让你重新开始。
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-num">2</span>
+          <div class="step-content">
+            <h4>切换会话</h4>
+            <p>
+              点击会话记录列表中的任意条目，切换到该会话，查看完整的对话历史和结果。
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-num">3</span>
+          <div class="step-content">
+            <h4>管理会话</h4>
+            <p>每条会话记录右侧提供两个操作按钮：</p>
+            <ul class="checklist">
+              <li><strong>重命名</strong> — 自定义会话标题，方便后续查找</li>
+              <li><strong>删除</strong> — 删除不需要的会话记录</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>会话记录信息</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>信息项</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>会话标题</td>
+                  <td>自动生成的对话主题摘要（可手动修改）</td>
+                </tr>
+                <tr>
+                  <td>时间戳</td>
+                  <td>相对时间显示，如 "13小时前"、"14小时前"</td>
+                </tr>
+                <tr>
+                  <td>状态</td>
+                  <td>部分模块显示会话状态（如「已完成」「进行中」）</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="faq">
+        <div class="section-header">
+          <span class="section-num">9</span>
+          <h2>常见问题</h2>
+        </div>
+
+        <div class="card">
+          <h3>Q1：如何开始使用系统？</h3>
+          <p>推荐的使用顺序：</p>
+          <ul class="checklist">
+            <li>第一步：进入「知识库」上传相关法律文档（PDF/Word/Excel）</li>
+            <li>第二步：等待文档索引完成</li>
+            <li>第三步：根据需要切换到对应功能模块开始使用</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Q2：为什么某些按钮是灰色的？</h3>
+          <p>按钮被禁用通常因为前置条件未满足：</p>
+          <ul class="checklist">
+            <li>「发起预测」需要填写案情摘要并选择至少一个文档</li>
+            <li>「发送」需要输入框中有内容</li>
+            <li>确保已上传文档到知识库，否则部分功能无法使用</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Q3：AI 的回答/推演结果准确吗？</h3>
+          <p>系统提供的是基于已有文档的分析和预测，结果质量取决于：</p>
+          <ul class="checklist">
+            <li>知识库中文档的相关性和覆盖面</li>
+            <li>输入信息的详细程度和准确性</li>
+            <li>检索参数的合理设置</li>
+          </ul>
+          <div class="warning">
+            <span class="warning-icon">⚠️</span>
+            <p>
+              <strong>重要</strong>：所有 AI
+              输出仅供参考，不构成法律意见或事实认定。重要案件请结合专业律师的人工分析。
+            </p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Q4：如何上传新的法律文档？</h3>
+          <p>
+            点击左侧导航栏的 <strong>「知识库」</strong> 进入文档管理页面，上传
+            PDF、Word、Excel
+            等格式的法律文档。系统会自动进行索引处理，之后即可在所有功能中使用。
+          </p>
+        </div>
+
+        <div class="card">
+          <h3>Q5：各模块之间的文档是共享的吗？</h3>
+          <p>
+            是的。所有功能模块共享同一个知识库。上传一次文档后，可以在法律问答、类案检索、合同审查和对方观点预判中统一使用。你也可以在每个模块中单独选择参考的文档子集。
+          </p>
+        </div>
+
+        <div class="card">
+          <h3>Q6：支持的文档格式和处理方式？</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>格式</th>
+                  <th>处理方式</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="tag tag-red">PDF</span></td>
+                  <td>按页拆分</td>
+                  <td>每页作为独立索引单元，便于精确定位</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-blue">Word</span></td>
+                  <td>全文提取</td>
+                  <td>整个文档作为一个索引单元</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-green">Excel</span></td>
+                  <td>规范化处理</td>
+                  <td>数据规范化后索引</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <span class="section-num">⚡</span>
+          <h2>快速参考手册</h2>
+        </div>
+
+        <div class="card">
+          <h3>最佳实践清单</h3>
+          <ul class="checklist">
+            <li>先上传与案件直接相关的法律文档到知识库</li>
+            <li>案情摘要应包含：争议焦点、关键事实、时间线、金额</li>
+            <li>检索条数建议设置为 5-10 条，平衡全面性与效率</li>
+            <li>优先选择与案件法律关系最匹配的文档</li>
+            <li>利用「多智能体过程」验证推演逻辑的合理性</li>
+            <li>定期清理不需要的历史会话，保持界面整洁</li>
+            <li>重要决策请结合专业律师的人工分析</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>功能速查表</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>功能</th>
+                  <th>路径</th>
+                  <th>核心用途</th>
+                  <th>关键操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>法律问答</td>
+                  <td><code>/chat</code></td>
+                  <td>自然语言法律咨询</td>
+                  <td>输入问题 → 获取带引用的回答</td>
+                </tr>
+                <tr>
+                  <td>知识库</td>
+                  <td><code>/documents</code></td>
+                  <td>文档上传与管理</td>
+                  <td>上传 → 等待索引 → 批量管理</td>
+                </tr>
+                <tr>
+                  <td>类案检索</td>
+                  <td><code>/search</code></td>
+                  <td>相似案例查找</td>
+                  <td>输入关键词 → 查看匹配结果</td>
+                </tr>
+                <tr>
+                  <td>合同审查</td>
+                  <td><code>/contract-review</code></td>
+                  <td>合同风险分析</td>
+                  <td>上传合同 → 获取审查报告</td>
+                </tr>
+                <tr>
+                  <td>对方观点预判</td>
+                  <td><code>/opponent-analysis</code></td>
+                  <td>庭审策略预测</td>
+                  <td>输入案情 → 多智能体推演 → 查看结果</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="highlight">
+          <p>
+            📌 <strong>系统地址</strong>：<code
+              >http://47.113.187.234:3000/</code
+            >
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>法律智能辅助系统 · AI-Powered Legal Assistant · 完整使用教程</p>
+      <p style="margin-top: 8px; opacity: 0.7">
+        本教程仅供参考 · 系统输出不构成法律意见
+      </p>
+    </footer>
+  </body>
+</html>
