@@ -18,6 +18,17 @@ type EvidenceRow = OpponentAnalysisCitation & {
   agents: string[];
 };
 
+type DialogueMeta = {
+  message_type?: string;
+  focus?: string;
+  incoming_from?: string[];
+  incoming_titles?: string[];
+  recipients?: string[];
+  inbox_count?: number;
+  memory_size?: number;
+  turns_taken?: number;
+};
+
 const store = useOpponentAnalysisStore();
 const documentStore = useDocumentStore();
 
@@ -211,9 +222,32 @@ function labelPhase(phase: string) {
 function labelAgent(agent: string | null) {
   return lanes.find((item) => item.key === agent)?.label || "系统编排";
 }
+function labelRecipients(value: string | null) {
+  if (!value) return "无后续消息";
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => labelAgent(item))
+    .join("、");
+}
 function laneClass(agent: string | null) {
   const index = lanes.findIndex((item) => item.key === agent);
   return index === -1 ? "process-card--system" : `process-card--lane-${index}`;
+}
+function dialogueMeta(event: { structured_payload: Record<string, unknown> }) {
+  return (event.structured_payload.dialogue_meta || {}) as DialogueMeta;
+}
+function labelMessageType(value?: string) {
+  return (
+    {
+      proposal: "首轮判断",
+      challenge: "质询",
+      review: "校准",
+      strategy: "应对",
+      reply: "回复",
+    }[value || ""] || "消息"
+  );
 }
 function formatDate(value: string | null) {
   if (!value) return "进行中";
@@ -261,7 +295,7 @@ async function deleteRun(runId: string) {
         <p class="eyebrow">Opponent Analysis Board</p>
         <h1>对方观点预测多智能体看板</h1>
         <p class="copy">
-          基于案情摘要与已索引文档，按四角编排接力推演，并把全过程沉淀为可追流、可回放的事件时间线。
+          基于案情摘要与已索引文档，让四个角色在隔离记忆、独立收件箱和自主路由下多轮对话，并把全过程沉淀为可追流、可回放的事件时间线。
         </p>
       </div>
       <div class="hero-stats">
@@ -599,11 +633,37 @@ async function deleteRun(runId: string) {
                     <strong>{{ labelAgent(event.from_agent) }}</strong>
                     <span class="pill">{{ labelPhase(event.phase) }}</span>
                   </div>
+                  <div class="process-route">
+                    <span>{{ labelAgent(event.from_agent) }}</span>
+                    <span>→</span>
+                    <span>{{ labelRecipients(event.to_agent) }}</span>
+                  </div>
                   <p class="process-title">{{ event.title }}</p>
                   <p class="copy">{{ event.content }}</p>
+                  <p
+                    v-if="dialogueMeta(event).focus"
+                    class="copy process-focus"
+                  >
+                    焦点：{{ dialogueMeta(event).focus }}
+                  </p>
+                  <div class="tag-row">
+                    <span class="tag">{{
+                      labelMessageType(dialogueMeta(event).message_type)
+                    }}</span>
+                    <span
+                      v-for="agent in dialogueMeta(event).incoming_from || []"
+                      :key="`${event.seq}-${agent}`"
+                      class="tag"
+                    >
+                      收到 {{ labelAgent(agent) }}
+                    </span>
+                  </div>
                   <div class="process-meta">
                     <span>第 {{ event.round }} 轮</span>
                     <span>{{ event.citations.length }} 条证据</span>
+                    <span v-if="dialogueMeta(event).memory_size">
+                      记忆 {{ dialogueMeta(event).memory_size }}
+                    </span>
                     <span>#{{ event.seq }}</span>
                   </div>
                 </article>
@@ -1018,6 +1078,17 @@ h1 {
 .process-title {
   margin: 10px 0;
   font-weight: 700;
+}
+.process-route {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 0.82rem;
+  color: #7c7369;
+}
+.process-focus {
+  margin-top: 10px;
 }
 .process-meta {
   display: flex;
