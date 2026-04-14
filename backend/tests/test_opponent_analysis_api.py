@@ -145,8 +145,8 @@ def test_opponent_analysis_create_list_detail_stream_and_delete(
     }
 
     events = payload["events"]
-    assert len(events) == 10
-    assert [event["seq"] for event in events] == list(range(1, 11))
+    assert len(events) == 13
+    assert [event["seq"] for event in events] == list(range(1, 14))
 
     unique_phases = list(dict.fromkeys(event["phase"] for event in events))
     assert unique_phases == [
@@ -159,6 +159,9 @@ def test_opponent_analysis_create_list_detail_stream_and_delete(
         "finalize",
     ]
 
+    runtime_event = next(
+        event for event in events if event["title"] == "多智能体运行时已启动"
+    )
     party_event = next(
         event for event in events if event["phase"] == "party_projection"
     )
@@ -166,25 +169,44 @@ def test_opponent_analysis_create_list_detail_stream_and_delete(
         event for event in events if event["phase"] == "counsel_projection"
     )
     bench_event = next(event for event in events if event["phase"] == "bench_review")
+    strategy_event = next(
+        event for event in events if event["phase"] == "strategy_response"
+    )
     revision_events = [event for event in events if event["phase"] == "revision"]
 
+    assert runtime_event["structured_payload"]["mode"] == "isolated_dialogue_runtime"
     assert party_event["from_agent"] == "opponent_party"
-    assert party_event["to_agent"] == "opponent_counsel"
+    assert "opponent_counsel" in (party_event["to_agent"] or "")
+    assert "bench_observer" in (party_event["to_agent"] or "")
     assert party_event["event_type"] == "agent_message"
+    assert (
+        party_event["structured_payload"]["dialogue_meta"]["message_type"] == "proposal"
+    )
 
     assert counsel_event["from_agent"] == "opponent_counsel"
-    assert counsel_event["to_agent"] == "bench_observer"
+    assert "bench_observer" in (counsel_event["to_agent"] or "")
+    assert "our_strategy_advisor" in (counsel_event["to_agent"] or "")
 
     assert bench_event["from_agent"] == "bench_observer"
     assert "our_strategy_advisor" in (bench_event["to_agent"] or "")
-
-    assert [
-        (item["from_agent"], item["to_agent"], item["event_type"])
-        for item in revision_events
-    ] == [
-        ("opponent_party", "opponent_counsel", "agent_revision"),
-        ("opponent_counsel", "our_strategy_advisor", "agent_revision"),
+    assert bench_event["structured_payload"]["dialogue_meta"]["incoming_from"] == [
+        "opponent_party",
+        "opponent_counsel",
     ]
+
+    assert strategy_event["from_agent"] == "our_strategy_advisor"
+    assert strategy_event["to_agent"] == "bench_observer"
+    assert len(revision_events) == 4
+    assert {item["from_agent"] for item in revision_events} == {
+        "opponent_party",
+        "opponent_counsel",
+        "bench_observer",
+        "our_strategy_advisor",
+    }
+    assert all(item["event_type"] == "agent_revision" for item in revision_events)
+    assert all(
+        "dialogue_meta" in item["structured_payload"] for item in revision_events
+    )
 
     list_response = client.get("/api/v1/opponent-analyses")
     assert list_response.status_code == 200
@@ -206,17 +228,17 @@ def test_opponent_analysis_create_list_detail_stream_and_delete(
     streamed_events = [
         item["event"] for item in stream_payloads if item["type"] == "event"
     ]
-    assert [event["seq"] for event in streamed_events] == list(range(1, 11))
+    assert [event["seq"] for event in streamed_events] == list(range(1, 14))
 
     resumed_stream_response = client.get(
         f"/api/v1/opponent-analyses/{payload['run']['id']}/stream",
-        params={"after_seq": 8},
+        params={"after_seq": 11},
     )
     resumed_payloads = _parse_sse_payloads(resumed_stream_response.text)
     resumed_events = [
         item["event"] for item in resumed_payloads if item["type"] == "event"
     ]
-    assert [event["seq"] for event in resumed_events] == [9, 10]
+    assert [event["seq"] for event in resumed_events] == [12, 13]
     assert resumed_payloads[-1]["run"]["status"] == "completed"
 
     delete_response = client.delete(f"/api/v1/opponent-analyses/{payload['run']['id']}")

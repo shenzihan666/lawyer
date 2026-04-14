@@ -142,6 +142,14 @@ def build_opponent_analysis_agent_system_prompt() -> list[PromptSegment]:
             content=("你必须只基于给定案情与证据进行预测，不得把预测写成确定事实。"),
         ),
         PromptSegment(
+            key="isolation",
+            version="v2",
+            content=(
+                "你处在一个隔离多智能体系统中。你只能依据共享上下文、自己的私有记忆和当前收件箱判断，"
+                "不能假设自己知道其他智能体的完整内部状态。"
+            ),
+        ),
+        PromptSegment(
             key="rules",
             version="v1",
             content=(

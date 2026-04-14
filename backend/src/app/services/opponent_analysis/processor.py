@@ -4,6 +4,7 @@ import json
 import logging
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -44,24 +45,124 @@ WORKFLOW_PHASES = (
     "finalize",
 )
 
-AGENT_REGISTRY: dict[str, dict[str, str]] = {
+MANDATORY_AGENT_ORDER = (
+    "opponent_party",
+    "opponent_counsel",
+    "bench_observer",
+    "our_strategy_advisor",
+)
+
+SCHEDULER_PRIORITY = (
+    "bench_observer",
+    "our_strategy_advisor",
+    "opponent_counsel",
+    "opponent_party",
+)
+
+MAX_DIALOGUE_TURNS = 8
+MAX_AGENT_TURNS = 3
+
+AGENT_REGISTRY: dict[str, dict[str, Any]] = {
     "opponent_party": {
         "label": "对方当事人",
         "objective": "从自身利益出发，预测对方当事人在庭上最可能坚持的事实叙事、回避点与说法。",
+        "phase": "party_projection",
+        "default_recipients": ["opponent_counsel", "bench_observer"],
     },
     "opponent_counsel": {
         "label": "对方律师",
         "objective": "基于对方当事人的叙事，预测对方律师可能采取的主张、抗辩、程序动作与进攻点。",
+        "phase": "counsel_projection",
+        "default_recipients": ["bench_observer", "our_strategy_advisor"],
     },
     "bench_observer": {
         "label": "庭审观察员",
         "objective": "从中立视角检查双方叙事的真实性、证据强弱和法庭可采性，并提出修正要求。",
+        "phase": "bench_review",
+        "default_recipients": [
+            "opponent_party",
+            "opponent_counsel",
+            "our_strategy_advisor",
+        ],
     },
     "our_strategy_advisor": {
         "label": "我方策略官",
         "objective": "基于前述预测结果，形成我方的庭审应对、证据补强与风险优先级建议。",
+        "phase": "strategy_response",
+        "default_recipients": ["bench_observer"],
     },
 }
+
+MESSAGE_TYPES = {"proposal", "challenge", "review", "strategy", "reply"}
+
+
+@dataclass(slots=True)
+class DialogueMessage:
+    phase: str
+    round_number: int
+    sender: str
+    recipients: list[str]
+    event_type: str
+    title: str
+    content: str
+    payload: OpponentAnalysisAgentPayload
+    citations: list[dict[str, Any]]
+    message_type: str
+    focus: str
+
+
+@dataclass(slots=True)
+class AgentDecision:
+    payload: OpponentAnalysisAgentPayload
+    recipients: list[str]
+    message_type: str
+    summary: str
+    focus: str
+
+
+@dataclass(slots=True)
+class AgentState:
+    agent_key: str
+    label: str
+    inbox: list[DialogueMessage] = field(default_factory=list)
+    memory: list[dict[str, Any]] = field(default_factory=list)
+    last_payload: OpponentAnalysisAgentPayload | None = None
+    turns_taken: int = 0
+    has_spoken: bool = False
+
+    def consume_inbox(self) -> list[DialogueMessage]:
+        items = list(self.inbox)
+        self.inbox.clear()
+        for item in items:
+            self.memory.append(self._to_memory_entry(item, direction="incoming"))
+        self._trim_memory()
+        return items
+
+    def remember_sent(self, item: DialogueMessage) -> None:
+        self.memory.append(self._to_memory_entry(item, direction="outgoing"))
+        self._trim_memory()
+
+    def _trim_memory(self) -> None:
+        if len(self.memory) > 12:
+            self.memory = self.memory[-12:]
+
+    @staticmethod
+    def _to_memory_entry(
+        item: DialogueMessage,
+        *,
+        direction: str,
+    ) -> dict[str, Any]:
+        return {
+            "direction": direction,
+            "phase": item.phase,
+            "round": item.round_number,
+            "sender": item.sender,
+            "recipients": list(item.recipients),
+            "message_type": item.message_type,
+            "focus": item.focus,
+            "summary": item.content,
+            "claims": list(item.payload.claims[:2]),
+        }
 
 
 class OpponentAnalysisProcessor:
@@ -98,7 +199,7 @@ class OpponentAnalysisProcessor:
                 to_agent=None,
                 event_type=OpponentAnalysisEventType.stage.value,
                 title="开始整理共享案情与证据",
-                content="先汇总案情、争点和现有文档证据，为后续四个智能体建立统一上下文。",
+                content="先汇总案情、争点和现有文档证据，为后续多智能体建立共享上下文。",
                 structured_payload={"phase": "context_brief"},
                 citations=[],
                 event_status="running",
@@ -117,9 +218,33 @@ class OpponentAnalysisProcessor:
                 to_agent=None,
                 event_type=OpponentAnalysisEventType.evidence.value,
                 title="共享证据包已生成",
-                content="已提炼争点地图、证据包与事实缺口，后续智能体会在此基础上接力推演。",
+                content="已提炼争点地图、证据包与事实缺口，多智能体将基于隔离记忆和消息收件箱继续推演。",
                 structured_payload=context_brief,
                 citations=context_brief["evidence_cards"],
+                event_status="done",
+            )
+            self.service.append_event(
+                run_id=run_id,
+                phase="context_brief",
+                round_number=0,
+                from_agent=None,
+                to_agent=None,
+                event_type=OpponentAnalysisEventType.stage.value,
+                title="多智能体运行时已启动",
+                content="每个角色拥有独立收件箱、独立记忆和自主收件人选择，后续事件不再按固定串行模板生成。",
+                structured_payload={
+                    "mode": "isolated_dialogue_runtime",
+                    "agents": [
+                        {
+                            "agent_key": agent_key,
+                            "label": meta["label"],
+                            "phase": meta["phase"],
+                            "default_recipients": meta["default_recipients"],
+                        }
+                        for agent_key, meta in AGENT_REGISTRY.items()
+                    ],
+                },
+                citations=[],
                 event_status="done",
             )
             self.analytics.append_step(
@@ -133,189 +258,51 @@ class OpponentAnalysisProcessor:
                 },
             )
 
-            party_output = self._generate_agent_output(
-                agent_key="opponent_party",
-                case_facts=run.case_facts,
-                phase="party_projection",
-                round_number=1,
-                evidence_cards=context_brief["evidence_cards"],
-                context_brief=context_brief,
-                upstream_payloads={},
-            )
-            self._append_agent_event(
+            agent_states = self._run_dialogue_runtime(
                 run_id=run_id,
-                phase="party_projection",
-                round_number=1,
-                from_agent="opponent_party",
-                to_agent="opponent_counsel",
-                title="对方当事人初步叙事",
-                payload=party_output,
-                evidence_cards=context_brief["evidence_cards"],
-                event_type=OpponentAnalysisEventType.agent_message.value,
-            )
-            self._record_agent_phase(
-                analytics_run.id, "party_projection", "opponent_party", party_output
-            )
-
-            counsel_output = self._generate_agent_output(
-                agent_key="opponent_counsel",
                 case_facts=run.case_facts,
-                phase="counsel_projection",
-                round_number=1,
-                evidence_cards=context_brief["evidence_cards"],
                 context_brief=context_brief,
-                upstream_payloads={"opponent_party": party_output},
+                analytics_run_id=analytics_run.id,
             )
-            self._append_agent_event(
-                run_id=run_id,
-                phase="counsel_projection",
-                round_number=1,
-                from_agent="opponent_counsel",
-                to_agent="bench_observer",
-                title="对方律师策略推演",
-                payload=counsel_output,
-                evidence_cards=context_brief["evidence_cards"],
-                event_type=OpponentAnalysisEventType.agent_message.value,
-            )
-            self._record_agent_phase(
-                analytics_run.id,
-                "counsel_projection",
-                "opponent_counsel",
-                counsel_output,
-            )
-
-            bench_output = self._generate_agent_output(
-                agent_key="bench_observer",
-                case_facts=run.case_facts,
-                phase="bench_review",
-                round_number=1,
-                evidence_cards=context_brief["evidence_cards"],
-                context_brief=context_brief,
-                upstream_payloads={
-                    "opponent_party": party_output,
-                    "opponent_counsel": counsel_output,
-                },
-            )
-            self._append_agent_event(
-                run_id=run_id,
-                phase="bench_review",
-                round_number=1,
-                from_agent="bench_observer",
-                to_agent="opponent_party,opponent_counsel,our_strategy_advisor",
-                title="庭审观察员校准意见",
-                payload=bench_output,
-                evidence_cards=context_brief["evidence_cards"],
-                event_type=OpponentAnalysisEventType.agent_message.value,
-            )
-            self._record_agent_phase(
-                analytics_run.id, "bench_review", "bench_observer", bench_output
-            )
-
-            strategy_output = self._generate_agent_output(
-                agent_key="our_strategy_advisor",
-                case_facts=run.case_facts,
-                phase="strategy_response",
-                round_number=1,
-                evidence_cards=context_brief["evidence_cards"],
-                context_brief=context_brief,
-                upstream_payloads={
-                    "opponent_party": party_output,
-                    "opponent_counsel": counsel_output,
-                    "bench_observer": bench_output,
-                },
-            )
-            self._append_agent_event(
-                run_id=run_id,
-                phase="strategy_response",
-                round_number=1,
-                from_agent="our_strategy_advisor",
-                to_agent=None,
-                title="我方策略官应对建议",
-                payload=strategy_output,
-                evidence_cards=context_brief["evidence_cards"],
-                event_type=OpponentAnalysisEventType.agent_message.value,
-            )
-            self._record_agent_phase(
-                analytics_run.id,
-                "strategy_response",
-                "our_strategy_advisor",
-                strategy_output,
-            )
-
-            revised_party_output = self._generate_agent_output(
-                agent_key="opponent_party",
-                case_facts=run.case_facts,
-                phase="revision",
-                round_number=2,
-                evidence_cards=context_brief["evidence_cards"],
-                context_brief=context_brief,
-                upstream_payloads={
-                    "bench_observer": bench_output,
-                    "previous_self": party_output,
-                },
-                revision=True,
-            )
-            self._append_agent_event(
-                run_id=run_id,
-                phase="revision",
-                round_number=2,
-                from_agent="opponent_party",
-                to_agent="opponent_counsel",
-                title="对方当事人修正叙事",
-                payload=revised_party_output,
-                evidence_cards=context_brief["evidence_cards"],
-                event_type=OpponentAnalysisEventType.agent_revision.value,
-            )
-            self._record_agent_phase(
-                analytics_run.id,
-                "revision_party",
+            party_output = self._resolve_final_agent_payload(
+                agent_states,
                 "opponent_party",
-                revised_party_output,
+                run.case_facts,
+                context_brief,
             )
-
-            revised_counsel_output = self._generate_agent_output(
-                agent_key="opponent_counsel",
-                case_facts=run.case_facts,
-                phase="revision",
-                round_number=2,
-                evidence_cards=context_brief["evidence_cards"],
-                context_brief=context_brief,
-                upstream_payloads={
-                    "bench_observer": bench_output,
-                    "opponent_party": revised_party_output,
-                    "previous_self": counsel_output,
-                },
-                revision=True,
-            )
-            self._append_agent_event(
-                run_id=run_id,
-                phase="revision",
-                round_number=2,
-                from_agent="opponent_counsel",
-                to_agent="our_strategy_advisor",
-                title="对方律师修正策略",
-                payload=revised_counsel_output,
-                evidence_cards=context_brief["evidence_cards"],
-                event_type=OpponentAnalysisEventType.agent_revision.value,
-            )
-            self._record_agent_phase(
-                analytics_run.id,
-                "revision_counsel",
+            counsel_output = self._resolve_final_agent_payload(
+                agent_states,
                 "opponent_counsel",
-                revised_counsel_output,
+                run.case_facts,
+                context_brief,
+            )
+            bench_output = self._resolve_final_agent_payload(
+                agent_states,
+                "bench_observer",
+                run.case_facts,
+                context_brief,
+            )
+            strategy_output = self._resolve_final_agent_payload(
+                agent_states,
+                "our_strategy_advisor",
+                run.case_facts,
+                context_brief,
             )
 
             final_summary = self._build_final_summary(
                 case_facts=run.case_facts,
                 context_brief=context_brief,
-                party_output=revised_party_output,
-                counsel_output=revised_counsel_output,
+                party_output=party_output,
+                counsel_output=counsel_output,
+                bench_output=bench_output,
                 strategy_output=strategy_output,
             )
             self.service.append_event(
                 run_id=run_id,
                 phase="finalize",
-                round_number=2,
+                round_number=max(
+                    [state.turns_taken for state in agent_states.values()] or [0]
+                ),
                 from_agent=None,
                 to_agent=None,
                 event_type=OpponentAnalysisEventType.summary.value,
@@ -366,6 +353,106 @@ class OpponentAnalysisProcessor:
             )
             raise
 
+    def _run_dialogue_runtime(
+        self,
+        *,
+        run_id: str,
+        case_facts: str,
+        context_brief: dict[str, Any],
+        analytics_run_id: str,
+    ) -> dict[str, AgentState]:
+        states = {
+            agent_key: AgentState(
+                agent_key=agent_key,
+                label=str(meta["label"]),
+            )
+            for agent_key, meta in AGENT_REGISTRY.items()
+        }
+
+        for turn_index in range(1, MAX_DIALOGUE_TURNS + 1):
+            agent_key = self._pick_next_agent(states)
+            if agent_key is None:
+                break
+
+            state = states[agent_key]
+            incoming_messages = state.consume_inbox()
+            revision = state.has_spoken
+            phase = "revision" if revision else str(AGENT_REGISTRY[agent_key]["phase"])
+            round_number = state.turns_taken + 1
+            decision = self._generate_agent_decision(
+                agent_key=agent_key,
+                case_facts=case_facts,
+                phase=phase,
+                round_number=round_number,
+                evidence_cards=context_brief["evidence_cards"],
+                context_brief=context_brief,
+                state=state,
+                incoming_messages=incoming_messages,
+                revision=revision,
+            )
+            recipients = self._normalize_recipients(
+                decision.recipients,
+                agent_key=agent_key,
+                incoming_messages=incoming_messages,
+                state=state,
+            )
+            event_type = (
+                OpponentAnalysisEventType.agent_revision.value
+                if revision
+                else OpponentAnalysisEventType.agent_message.value
+            )
+            citations = self.service.build_citations_by_number(
+                context_brief["evidence_cards"],
+                decision.payload.citation_numbers,
+            )
+            title = self._build_event_title(
+                agent_key=agent_key,
+                incoming_messages=incoming_messages,
+                revision=revision,
+            )
+            content = self._clip_text(
+                decision.summary
+                or "；".join(decision.payload.claims[:2])
+                or decision.payload.notes,
+                220,
+            )
+            message = DialogueMessage(
+                phase=phase,
+                round_number=round_number,
+                sender=agent_key,
+                recipients=recipients,
+                event_type=event_type,
+                title=title,
+                content=content,
+                payload=decision.payload,
+                citations=citations,
+                message_type=decision.message_type,
+                focus=decision.focus,
+            )
+
+            state.turns_taken += 1
+            state.has_spoken = True
+            state.last_payload = decision.payload
+            state.remember_sent(message)
+            self._dispatch_message(states, message)
+            self._append_agent_event(
+                run_id=run_id,
+                message=message,
+                incoming_messages=incoming_messages,
+                state=state,
+            )
+            self._record_agent_phase(
+                analytics_run_id=analytics_run_id,
+                step_key=f"turn_{turn_index:02d}_{agent_key}",
+                phase=phase,
+                agent_key=agent_key,
+                payload=decision.payload,
+                recipients=recipients,
+                incoming_messages=incoming_messages,
+            )
+
+        return states
+
     def _build_context_brief(
         self,
         case_facts: str,
@@ -410,7 +497,7 @@ class OpponentAnalysisProcessor:
             "search_meta": search_response.meta,
         }
 
-    def _generate_agent_output(
+    def _generate_agent_decision(
         self,
         *,
         agent_key: str,
@@ -419,19 +506,21 @@ class OpponentAnalysisProcessor:
         round_number: int,
         evidence_cards: Sequence[dict],
         context_brief: dict[str, Any],
-        upstream_payloads: dict[str, OpponentAnalysisAgentPayload],
-        revision: bool = False,
-    ) -> OpponentAnalysisAgentPayload:
+        state: AgentState,
+        incoming_messages: Sequence[DialogueMessage],
+        revision: bool,
+    ) -> AgentDecision:
         if self.llm.is_configured():
             try:
-                return self._generate_agent_output_with_llm(
+                return self._generate_agent_decision_with_llm(
                     agent_key=agent_key,
                     case_facts=case_facts,
                     phase=phase,
                     round_number=round_number,
                     evidence_cards=evidence_cards,
                     context_brief=context_brief,
-                    upstream_payloads=upstream_payloads,
+                    state=state,
+                    incoming_messages=incoming_messages,
                     revision=revision,
                 )
             except Exception:
@@ -440,16 +529,17 @@ class OpponentAnalysisProcessor:
                     extra={"agent_key": agent_key, "phase": phase},
                 )
 
-        return self._generate_agent_output_with_heuristics(
+        return self._build_heuristic_agent_decision(
             agent_key=agent_key,
             case_facts=case_facts,
             evidence_cards=evidence_cards,
             context_brief=context_brief,
-            upstream_payloads=upstream_payloads,
+            state=state,
+            incoming_messages=incoming_messages,
             revision=revision,
         )
 
-    def _generate_agent_output_with_llm(
+    def _generate_agent_decision_with_llm(
         self,
         *,
         agent_key: str,
@@ -458,13 +548,11 @@ class OpponentAnalysisProcessor:
         round_number: int,
         evidence_cards: Sequence[dict],
         context_brief: dict[str, Any],
-        upstream_payloads: dict[str, OpponentAnalysisAgentPayload],
+        state: AgentState,
+        incoming_messages: Sequence[DialogueMessage],
         revision: bool,
-    ) -> OpponentAnalysisAgentPayload:
+    ) -> AgentDecision:
         agent_meta = AGENT_REGISTRY[agent_key]
-        upstream_json = {
-            key: value.model_dump() for key, value in upstream_payloads.items()
-        }
         system_prompt = assemble_prompt_segments(
             build_opponent_analysis_agent_system_prompt(),
             TokenBudget(max_input_tokens=500, reserved_output_tokens=120),
@@ -473,7 +561,7 @@ class OpponentAnalysisProcessor:
             [
                 PromptSegment(
                     key="stage",
-                    version="v1",
+                    version="v2",
                     content=(
                         f"当前阶段: {phase}\n"
                         f"回合: {round_number}\n"
@@ -484,25 +572,48 @@ class OpponentAnalysisProcessor:
                 ),
                 PromptSegment(
                     key="case",
-                    version="v1",
+                    version="v2",
                     content=f"案情摘要:\n{case_facts.strip()}",
                 ),
                 PromptSegment(
                     key="context",
-                    version="v1",
+                    version="v2",
                     content=f"共享上下文:\n{json.dumps(context_brief, ensure_ascii=False)}",
                 ),
                 PromptSegment(
-                    key="upstream",
-                    version="v1",
-                    content=f"上游智能体输出:\n{json.dumps(upstream_json, ensure_ascii=False)}",
+                    key="memory",
+                    version="v2",
+                    content=(
+                        "你的私有记忆(只允许基于自己的发送/接收记录判断):\n"
+                        f"{json.dumps(state.memory[-8:], ensure_ascii=False)}"
+                    ),
+                ),
+                PromptSegment(
+                    key="inbox",
+                    version="v2",
+                    content=(
+                        "你本轮收到的消息:\n"
+                        f"{json.dumps(self._serialize_incoming_messages(incoming_messages), ensure_ascii=False)}"
+                    ),
+                ),
+                PromptSegment(
+                    key="routing",
+                    version="v2",
+                    content=(
+                        "可选收件人仅限以下 agent_key，且不能发给自己:\n"
+                        f"{json.dumps(self._allowed_recipient_keys(agent_key), ensure_ascii=False)}"
+                    ),
                 ),
                 PromptSegment(
                     key="schema",
-                    version="v1",
+                    version="v2",
                     content=(
-                        "请输出 JSON，字段固定如下：\n"
+                        "请只输出 JSON，字段固定如下：\n"
                         "{"
+                        '"summary":"一句概括本轮发言",'
+                        '"focus":"本轮聚焦问题",'
+                        '"message_type":"proposal|challenge|review|strategy|reply",'
+                        '"recipients":["agent_key"],'
                         '"claims":["3条以内的关键预测主张"],'
                         '"likely_quotes":["2到3句庭上可能说出的话"],'
                         '"likely_actions":["2到4个动作或策略"],'
@@ -512,28 +623,90 @@ class OpponentAnalysisProcessor:
                         '"citation_numbers":[1,2]'
                         "}\n\n"
                         "要求：\n"
-                        "1. 只能引用 evidence_cards 中出现的 citation_numbers。\n"
-                        "2. confidence 取值 0 到 1。\n"
-                        "3. revision=true 时，要显式吸收庭审观察员意见并修正原先说法。\n"
-                        "4. 如果证据不足，可以保守输出，但不要返回空结构。"
+                        "1. 你只能看到共享上下文、自己的私有记忆和当前收件箱，不能假设自己掌握其他 agent 的完整状态。\n"
+                        "2. recipients 必须从允许列表中选择，也可以为空列表。\n"
+                        "3. 所有结论都必须使用预测措辞，不能写成确定事实。\n"
+                        "4. 只能引用 evidence_cards 中出现的 citation_numbers。\n"
+                        "5. revision=true 时，要吸收本轮收件箱里的反馈并显式修正原判断。"
                     ),
                 ),
             ],
-            TokenBudget(max_input_tokens=2600, reserved_output_tokens=700),
+            TokenBudget(max_input_tokens=2800, reserved_output_tokens=800),
         ).text
         raw = self.llm.chat_json(system_prompt=system_prompt, user_prompt=user_prompt)
-        return self._normalize_agent_payload(raw, evidence_cards, agent_key)
+        return self._normalize_agent_decision(
+            raw=raw,
+            agent_key=agent_key,
+            case_facts=case_facts,
+            evidence_cards=evidence_cards,
+            context_brief=context_brief,
+            state=state,
+            incoming_messages=incoming_messages,
+            revision=revision,
+        )
 
-    def _generate_agent_output_with_heuristics(
+    def _build_heuristic_agent_decision(
         self,
         *,
         agent_key: str,
         case_facts: str,
         evidence_cards: Sequence[dict],
         context_brief: dict[str, Any],
-        upstream_payloads: dict[str, OpponentAnalysisAgentPayload],
+        state: AgentState,
+        incoming_messages: Sequence[DialogueMessage],
+        revision: bool,
+    ) -> AgentDecision:
+        payload = self._build_heuristic_agent_payload(
+            agent_key=agent_key,
+            case_facts=case_facts,
+            evidence_cards=evidence_cards,
+            context_brief=context_brief,
+            incoming_messages=incoming_messages,
+            revision=revision,
+        )
+        sender_labels = self._sender_labels(incoming_messages)
+        if sender_labels:
+            summary = f"结合{sender_labels}的最新消息，{payload.claims[0]}"
+        else:
+            summary = payload.claims[0] if payload.claims else payload.notes
+        focus = (
+            payload.attack_points[0]
+            if payload.attack_points
+            else payload.claims[0]
+            if payload.claims
+            else payload.notes
+        )
+        return AgentDecision(
+            payload=payload,
+            recipients=self._suggest_recipients(
+                agent_key=agent_key,
+                incoming_messages=incoming_messages,
+                state=state,
+            ),
+            message_type=self._normalize_message_type(
+                None,
+                agent_key=agent_key,
+                revision=revision,
+            ),
+            summary=self._clip_text(summary, 220),
+            focus=self._clip_text(focus, 100),
+        )
+
+    def _build_heuristic_agent_payload(
+        self,
+        *,
+        agent_key: str,
+        case_facts: str,
+        evidence_cards: Sequence[dict],
+        context_brief: dict[str, Any],
+        incoming_messages: Sequence[DialogueMessage],
         revision: bool,
     ) -> OpponentAnalysisAgentPayload:
+        peer_payloads = {
+            item.sender: item.payload
+            for item in incoming_messages
+            if item.sender in AGENT_REGISTRY
+        }
         issues = context_brief.get("issue_map", []) or self._extract_key_points(
             case_facts, limit=3
         )
@@ -546,11 +719,16 @@ class OpponentAnalysisProcessor:
         ]
 
         if agent_key == "opponent_party":
+            bench_feedback = peer_payloads.get("bench_observer")
             claims = [
                 f"可能会围绕“{first_issue}”构建对己有利的事实叙事。",
                 "可能弱化对自身不利的履行细节或沟通节点。",
                 "可能强调自己并非主动违约，而是受到对方行为或客观情况影响。",
             ]
+            if bench_feedback and bench_feedback.attack_points:
+                claims[1] = (
+                    f"收到观察员追问后，可能会进一步回避“{bench_feedback.attack_points[0]}”这一薄弱点。"
+                )
             likely_quotes = [
                 "我方一直是按当时情况正常处理，对方现在的说法并不完整。",
                 "关键事实不能只看单一材料，还要结合双方当时的沟通背景。",
@@ -566,7 +744,8 @@ class OpponentAnalysisProcessor:
             notes = "更倾向于从个人经历和结果公平性角度来包装说法。"
             confidence = 0.66 if evidence_cards else 0.42
         elif agent_key == "opponent_counsel":
-            upstream_party = upstream_payloads.get("opponent_party")
+            upstream_party = peer_payloads.get("opponent_party")
+            bench_feedback = peer_payloads.get("bench_observer")
             claims = [
                 f"可能把“{first_issue}”包装成法律争点并主动重述证明责任分配。",
                 "可能主张对方证据链条不完整，无法单独推出其核心结论。",
@@ -575,6 +754,10 @@ class OpponentAnalysisProcessor:
             if upstream_party and upstream_party.claims:
                 claims[0] = (
                     f"可能会把当事人的叙事“{upstream_party.claims[0]}”转写为正式法庭主张。"
+                )
+            if bench_feedback and bench_feedback.attack_points:
+                claims[1] = (
+                    f"在收到校准意见后，可能进一步放大“{bench_feedback.attack_points[0]}”对应的证据断点。"
                 )
             likely_quotes = [
                 "对方的证据只能证明片段事实，尚不足以完整证明其待证事项。",
@@ -591,7 +774,8 @@ class OpponentAnalysisProcessor:
             notes = "更像是在替对方叙事寻找法律包装和证据攻击路径。"
             confidence = 0.72 if evidence_cards else 0.45
         elif agent_key == "bench_observer":
-            upstream_counsel = upstream_payloads.get("opponent_counsel")
+            upstream_counsel = peer_payloads.get("opponent_counsel")
+            upstream_strategy = peer_payloads.get("our_strategy_advisor")
             claims = [
                 "法庭更可能关注时间线、证据形成过程和证明对象是否一一对应。",
                 "单靠立场化叙事无法持续说服法庭，核心仍是证据闭环。",
@@ -600,6 +784,10 @@ class OpponentAnalysisProcessor:
             if upstream_counsel and upstream_counsel.attack_points:
                 claims[1] = (
                     f"对方律师最有可能抓住“{upstream_counsel.attack_points[0]}”持续施压。"
+                )
+            if upstream_strategy and upstream_strategy.likely_actions:
+                claims[2] = (
+                    f"从应对角度看，法庭会重点检验“{upstream_strategy.likely_actions[0]}”是否真的有证据支撑。"
                 )
             likely_quotes = [
                 "请双方围绕关键事实节点对应具体证据，不要仅作概括性陈述。",
@@ -616,8 +804,8 @@ class OpponentAnalysisProcessor:
             notes = "中立视角下，最容易放大的不是情绪，而是证据链断点。"
             confidence = 0.74 if evidence_cards else 0.5
         else:
-            upstream_counsel = upstream_payloads.get("opponent_counsel")
-            upstream_bench = upstream_payloads.get("bench_observer")
+            upstream_counsel = peer_payloads.get("opponent_counsel")
+            upstream_bench = peer_payloads.get("bench_observer")
             claims = [
                 "我方应先把关键事实时间线钉牢，再处理对方的解释空间。",
                 "对方律师若围绕证据完整性发力，我方需提前准备对应闭环。",
@@ -626,6 +814,10 @@ class OpponentAnalysisProcessor:
             if upstream_counsel and upstream_counsel.attack_points:
                 claims[1] = (
                     f"我方应优先回应对方可能攻击的“{upstream_counsel.attack_points[0]}”。"
+                )
+            if upstream_bench and upstream_bench.attack_points:
+                claims[2] = (
+                    f"观察员已经提示“{upstream_bench.attack_points[0]}”，我方需要先补足这一法庭关注点。"
                 )
             likely_quotes = [
                 "我方主张并非孤立陈述，而是有对应材料和时间节点相互印证。",
@@ -646,7 +838,7 @@ class OpponentAnalysisProcessor:
             confidence = 0.78 if evidence_cards else 0.55
 
         if revision:
-            notes = f"已根据校准意见修正：{notes}"
+            notes = f"已根据本轮收件箱反馈修正：{notes}"
             likely_actions = [
                 action.replace("可能", "更可能") for action in likely_actions
             ]
@@ -669,6 +861,7 @@ class OpponentAnalysisProcessor:
         context_brief: dict[str, Any],
         party_output: OpponentAnalysisAgentPayload,
         counsel_output: OpponentAnalysisAgentPayload,
+        bench_output: OpponentAnalysisAgentPayload,
         strategy_output: OpponentAnalysisAgentPayload,
     ) -> OpponentAnalysisSummary:
         if self.llm.is_configured():
@@ -678,6 +871,7 @@ class OpponentAnalysisProcessor:
                     context_brief=context_brief,
                     party_output=party_output,
                     counsel_output=counsel_output,
+                    bench_output=bench_output,
                     strategy_output=strategy_output,
                 )
             except Exception:
@@ -687,6 +881,7 @@ class OpponentAnalysisProcessor:
             context_brief=context_brief,
             party_output=party_output,
             counsel_output=counsel_output,
+            bench_output=bench_output,
             strategy_output=strategy_output,
         )
 
@@ -697,6 +892,7 @@ class OpponentAnalysisProcessor:
         context_brief: dict[str, Any],
         party_output: OpponentAnalysisAgentPayload,
         counsel_output: OpponentAnalysisAgentPayload,
+        bench_output: OpponentAnalysisAgentPayload,
         strategy_output: OpponentAnalysisAgentPayload,
     ) -> OpponentAnalysisSummary:
         system_prompt = assemble_prompt_segments(
@@ -707,32 +903,37 @@ class OpponentAnalysisProcessor:
             [
                 PromptSegment(
                     key="case",
-                    version="v1",
+                    version="v2",
                     content=f"案情摘要:\n{case_facts.strip()}",
                 ),
                 PromptSegment(
                     key="context",
-                    version="v1",
+                    version="v2",
                     content=f"共享上下文:\n{json.dumps(context_brief, ensure_ascii=False)}",
                 ),
                 PromptSegment(
                     key="party",
-                    version="v1",
+                    version="v2",
                     content=f"对方当事人输出:\n{json.dumps(party_output.model_dump(), ensure_ascii=False)}",
                 ),
                 PromptSegment(
                     key="counsel",
-                    version="v1",
+                    version="v2",
                     content=f"对方律师输出:\n{json.dumps(counsel_output.model_dump(), ensure_ascii=False)}",
                 ),
                 PromptSegment(
+                    key="bench",
+                    version="v2",
+                    content=f"庭审观察员输出:\n{json.dumps(bench_output.model_dump(), ensure_ascii=False)}",
+                ),
+                PromptSegment(
                     key="strategy",
-                    version="v1",
+                    version="v2",
                     content=f"我方策略官输出:\n{json.dumps(strategy_output.model_dump(), ensure_ascii=False)}",
                 ),
                 PromptSegment(
                     key="schema",
-                    version="v1",
+                    version="v2",
                     content=(
                         "请输出 JSON，结构如下：\n"
                         "{"
@@ -745,7 +946,7 @@ class OpponentAnalysisProcessor:
                     ),
                 ),
             ],
-            TokenBudget(max_input_tokens=2600, reserved_output_tokens=700),
+            TokenBudget(max_input_tokens=2800, reserved_output_tokens=800),
         ).text
         raw = self.llm.chat_json(system_prompt=system_prompt, user_prompt=user_prompt)
         summary = OpponentAnalysisSummary(
@@ -753,14 +954,22 @@ class OpponentAnalysisProcessor:
                 raw.get("opponent_position", {})
             ),
             lawyer_predictions=self._normalize_agent_payload(
-                raw.get("lawyer_predictions", {}),
-                context_brief.get("evidence_cards", []),
-                "opponent_counsel",
+                raw=raw.get("lawyer_predictions", {}),
+                evidence_cards=context_brief.get("evidence_cards", []),
+                agent_key="opponent_counsel",
+                case_facts=case_facts,
+                context_brief=context_brief,
+                incoming_messages=[],
+                revision=False,
             ),
             party_predictions=self._normalize_agent_payload(
-                raw.get("party_predictions", {}),
-                context_brief.get("evidence_cards", []),
-                "opponent_party",
+                raw=raw.get("party_predictions", {}),
+                evidence_cards=context_brief.get("evidence_cards", []),
+                agent_key="opponent_party",
+                case_facts=case_facts,
+                context_brief=context_brief,
+                incoming_messages=[],
+                revision=False,
             ),
             response_plan=OpponentAnalysisResponsePlan.model_validate(
                 raw.get("response_plan", {})
@@ -773,6 +982,8 @@ class OpponentAnalysisProcessor:
             {
                 "party_predictions": summary.party_predictions,
                 "lawyer_predictions": summary.lawyer_predictions,
+                "bench_review": bench_output,
+                "response_plan": strategy_output,
             },
         )
         return summary
@@ -783,6 +994,7 @@ class OpponentAnalysisProcessor:
         context_brief: dict[str, Any],
         party_output: OpponentAnalysisAgentPayload,
         counsel_output: OpponentAnalysisAgentPayload,
+        bench_output: OpponentAnalysisAgentPayload,
         strategy_output: OpponentAnalysisAgentPayload,
     ) -> OpponentAnalysisSummary:
         evidence_index = self._aggregate_evidence_usage(
@@ -790,17 +1002,20 @@ class OpponentAnalysisProcessor:
             {
                 "party_predictions": party_output,
                 "lawyer_predictions": counsel_output,
+                "bench_review": bench_output,
                 "response_plan": strategy_output,
             },
         )
-        attack_total = len(counsel_output.attack_points) + len(
-            party_output.attack_points
+        attack_total = (
+            len(counsel_output.attack_points)
+            + len(party_output.attack_points)
+            + len(bench_output.attack_points)
         )
         if not evidence_index:
             risk_level = "high"
-        elif attack_total >= 5:
+        elif attack_total >= 7:
             risk_level = "high"
-        elif attack_total >= 3:
+        elif attack_total >= 4:
             risk_level = "medium"
         else:
             risk_level = "low"
@@ -808,21 +1023,35 @@ class OpponentAnalysisProcessor:
         return OpponentAnalysisSummary(
             opponent_position=OpponentAnalysisOpponentPosition(
                 summary=(
-                    "对方更可能围绕已有争点组织一套对己有利的事实解释，"
-                    "并由律师把它包装成围绕证据完整性与证明责任展开的法庭主张。"
+                    "对方更可能围绕已有争点组织对己有利的事实解释，"
+                    "并由律师把它包装成围绕证据完整性与证明责任展开的法庭主张；"
+                    "庭审观察视角会持续放大证据闭环中的断点。"
                 ),
-                claims=[*counsel_output.claims[:2], *party_output.claims[:1]][:3],
+                claims=[
+                    *counsel_output.claims[:1],
+                    *party_output.claims[:1],
+                    *bench_output.claims[:1],
+                ][:3],
                 confidence=round(
-                    max(counsel_output.confidence, party_output.confidence), 2
+                    max(
+                        counsel_output.confidence,
+                        party_output.confidence,
+                        bench_output.confidence,
+                    ),
+                    2,
                 ),
             ),
             lawyer_predictions=counsel_output,
             party_predictions=party_output,
             response_plan=OpponentAnalysisResponsePlan(
-                priority_actions=strategy_output.likely_actions[:3],
+                priority_actions=[
+                    *strategy_output.likely_actions[:2],
+                    *bench_output.likely_actions[:1],
+                ][:3],
                 courtroom_responses=strategy_output.likely_quotes[:3],
                 evidence_to_prepare=(
-                    strategy_output.attack_points[:3]
+                    strategy_output.attack_points[:2]
+                    + bench_output.attack_points[:1]
                     + context_brief.get("fact_gaps", [])[:2]
                 )[:4],
                 notes=strategy_output.notes,
@@ -835,58 +1064,124 @@ class OpponentAnalysisProcessor:
         self,
         *,
         run_id: str,
-        phase: str,
-        round_number: int,
-        from_agent: str,
-        to_agent: str | None,
-        title: str,
-        payload: OpponentAnalysisAgentPayload,
-        evidence_cards: Sequence[dict],
-        event_type: str,
+        message: DialogueMessage,
+        incoming_messages: Sequence[DialogueMessage],
+        state: AgentState,
     ) -> None:
-        citations = self.service.build_citations_by_number(
-            evidence_cards, payload.citation_numbers
-        )
-        content = "；".join(payload.claims[:2]) or payload.notes
+        structured_payload = {
+            **message.payload.model_dump(),
+            "dialogue_meta": {
+                "message_type": message.message_type,
+                "focus": message.focus,
+                "incoming_from": [item.sender for item in incoming_messages],
+                "incoming_titles": [item.title for item in incoming_messages],
+                "recipients": message.recipients,
+                "inbox_count": len(incoming_messages),
+                "memory_size": len(state.memory),
+                "turns_taken": state.turns_taken,
+            },
+        }
         self.service.append_event(
             run_id=run_id,
-            phase=phase,
-            round_number=round_number,
-            from_agent=from_agent,
-            to_agent=to_agent,
-            event_type=event_type,
-            title=title,
-            content=content,
-            structured_payload=payload.model_dump(),
-            citations=citations,
+            phase=message.phase,
+            round_number=message.round_number,
+            from_agent=message.sender,
+            to_agent=",".join(message.recipients) or None,
+            event_type=message.event_type,
+            title=message.title,
+            content=message.content,
+            structured_payload=structured_payload,
+            citations=message.citations,
             event_status="done",
         )
 
     def _record_agent_phase(
         self,
+        *,
         analytics_run_id: str,
+        step_key: str,
         phase: str,
         agent_key: str,
         payload: OpponentAnalysisAgentPayload,
+        recipients: Sequence[str],
+        incoming_messages: Sequence[DialogueMessage],
     ) -> None:
         self.analytics.append_step(
             analytics_run_id,
-            step_key=phase,
-            title=f"{agent_key} phase completed",
+            step_key=step_key,
+            title=f"{agent_key} dialogue turn completed",
             status="done",
             payload={
+                "phase": phase,
                 "agent_key": agent_key,
                 "claim_count": len(payload.claims),
                 "citation_count": len(payload.citation_numbers),
                 "confidence": payload.confidence,
+                "recipient_count": len(recipients),
+                "incoming_count": len(incoming_messages),
             },
+        )
+
+    def _normalize_agent_decision(
+        self,
+        *,
+        raw: dict[str, Any],
+        agent_key: str,
+        case_facts: str,
+        evidence_cards: Sequence[dict],
+        context_brief: dict[str, Any],
+        state: AgentState,
+        incoming_messages: Sequence[DialogueMessage],
+        revision: bool,
+    ) -> AgentDecision:
+        payload = self._normalize_agent_payload(
+            raw=raw,
+            evidence_cards=evidence_cards,
+            agent_key=agent_key,
+            case_facts=case_facts,
+            context_brief=context_brief,
+            incoming_messages=incoming_messages,
+            revision=revision,
+        )
+        recipients = self._normalize_recipients(
+            raw.get("recipients", []),
+            agent_key=agent_key,
+            incoming_messages=incoming_messages,
+            state=state,
+        )
+        summary = self._clip_text(
+            str(raw.get("summary", "")).strip()
+            or "；".join(payload.claims[:2])
+            or payload.notes,
+            220,
+        )
+        focus = self._clip_text(
+            str(raw.get("focus", "")).strip()
+            or (payload.attack_points[0] if payload.attack_points else payload.notes),
+            100,
+        )
+        return AgentDecision(
+            payload=payload,
+            recipients=recipients,
+            message_type=self._normalize_message_type(
+                raw.get("message_type"),
+                agent_key=agent_key,
+                revision=revision,
+            ),
+            summary=summary,
+            focus=focus,
         )
 
     def _normalize_agent_payload(
         self,
+        *,
         raw: dict[str, Any],
         evidence_cards: Sequence[dict],
         agent_key: str,
+        case_facts: str,
+        context_brief: dict[str, Any],
+        incoming_messages: Sequence[DialogueMessage],
+        revision: bool,
     ) -> OpponentAnalysisAgentPayload:
         max_citation_number = max(
             [int(item.get("citation_number", 0)) for item in evidence_cards] or [0]
@@ -916,13 +1211,13 @@ class OpponentAnalysisProcessor:
         if not citation_numbers and max_citation_number:
             citation_numbers = [1]
 
-        fallback = self._generate_agent_output_with_heuristics(
+        fallback = self._build_heuristic_agent_payload(
             agent_key=agent_key,
-            case_facts="",
+            case_facts=case_facts,
             evidence_cards=evidence_cards,
-            context_brief={"issue_map": [], "fact_gaps": []},
-            upstream_payloads={},
-            revision=False,
+            context_brief=context_brief,
+            incoming_messages=incoming_messages,
+            revision=revision,
         )
         return OpponentAnalysisAgentPayload(
             claims=normalize_list("claims", fallback.claims)[:3],
@@ -963,6 +1258,179 @@ class OpponentAnalysisProcessor:
         aggregated.sort(key=lambda item: item.citation_number)
         return aggregated
 
+    def _pick_next_agent(self, states: dict[str, AgentState]) -> str | None:
+        for agent_key in MANDATORY_AGENT_ORDER:
+            if not states[agent_key].has_spoken:
+                return agent_key
+
+        candidates: list[tuple[int, int, int, str]] = []
+        for priority, agent_key in enumerate(SCHEDULER_PRIORITY):
+            state = states[agent_key]
+            if not state.inbox:
+                continue
+            if state.turns_taken >= MAX_AGENT_TURNS:
+                continue
+            candidates.append(
+                (len(state.inbox), -priority, -state.turns_taken, agent_key)
+            )
+        if not candidates:
+            return None
+        candidates.sort(reverse=True)
+        return candidates[0][3]
+
+    def _dispatch_message(
+        self,
+        states: dict[str, AgentState],
+        message: DialogueMessage,
+    ) -> None:
+        for recipient in message.recipients:
+            if recipient == message.sender:
+                continue
+            state = states.get(recipient)
+            if state is None:
+                continue
+            state.inbox.append(message)
+
+    def _normalize_recipients(
+        self,
+        raw: object,
+        *,
+        agent_key: str,
+        incoming_messages: Sequence[DialogueMessage],
+        state: AgentState,
+    ) -> list[str]:
+        allowed = set(self._allowed_recipient_keys(agent_key))
+        recipients: list[str] = []
+        if isinstance(raw, list):
+            for item in raw:
+                normalized = str(item).strip()
+                if normalized in allowed and normalized not in recipients:
+                    recipients.append(normalized)
+        if recipients:
+            return recipients[:3]
+        return self._suggest_recipients(
+            agent_key=agent_key,
+            incoming_messages=incoming_messages,
+            state=state,
+        )
+
+    def _suggest_recipients(
+        self,
+        *,
+        agent_key: str,
+        incoming_messages: Sequence[DialogueMessage],
+        state: AgentState,
+    ) -> list[str]:
+        senders = [
+            item.sender
+            for item in incoming_messages
+            if item.sender in AGENT_REGISTRY and item.sender != agent_key
+        ]
+        unique_senders = list(dict.fromkeys(senders))
+        defaults = [
+            item
+            for item in AGENT_REGISTRY[agent_key]["default_recipients"]
+            if item != agent_key
+        ]
+
+        if agent_key == "our_strategy_advisor":
+            if state.turns_taken == 0:
+                return ["bench_observer"]
+            return []
+
+        recipients = list(unique_senders)
+        for item in defaults:
+            if item not in recipients:
+                recipients.append(item)
+
+        if agent_key == "bench_observer" and "our_strategy_advisor" not in recipients:
+            recipients.append("our_strategy_advisor")
+
+        return recipients[:3]
+
+    @staticmethod
+    def _normalize_message_type(
+        raw: object,
+        *,
+        agent_key: str,
+        revision: bool,
+    ) -> str:
+        normalized = str(raw or "").strip().lower()
+        if normalized in MESSAGE_TYPES:
+            return normalized
+        if agent_key == "bench_observer":
+            return "review"
+        if agent_key == "our_strategy_advisor":
+            return "strategy"
+        if revision:
+            return "reply"
+        return "proposal"
+
+    @staticmethod
+    def _allowed_recipient_keys(agent_key: str) -> list[str]:
+        return [item for item in AGENT_REGISTRY if item != agent_key]
+
+    def _resolve_final_agent_payload(
+        self,
+        states: dict[str, AgentState],
+        agent_key: str,
+        case_facts: str,
+        context_brief: dict[str, Any],
+    ) -> OpponentAnalysisAgentPayload:
+        state = states[agent_key]
+        if state.last_payload is not None:
+            return state.last_payload
+        return self._build_heuristic_agent_payload(
+            agent_key=agent_key,
+            case_facts=case_facts,
+            evidence_cards=context_brief.get("evidence_cards", []),
+            context_brief=context_brief,
+            incoming_messages=[],
+            revision=False,
+        )
+
+    def _build_event_title(
+        self,
+        *,
+        agent_key: str,
+        incoming_messages: Sequence[DialogueMessage],
+        revision: bool,
+    ) -> str:
+        label = str(AGENT_REGISTRY[agent_key]["label"])
+        sender_labels = self._sender_labels(incoming_messages)
+        if not sender_labels:
+            return f"{label}发起首轮判断"
+        if revision:
+            return f"{label}回应{sender_labels}"
+        return f"{label}接收{sender_labels}后给出判断"
+
+    def _sender_labels(self, incoming_messages: Sequence[DialogueMessage]) -> str:
+        labels: list[str] = []
+        for item in incoming_messages:
+            label = str(AGENT_REGISTRY.get(item.sender, {}).get("label", item.sender))
+            if label and label not in labels:
+                labels.append(label)
+        return "、".join(labels)
+
+    @staticmethod
+    def _serialize_incoming_messages(
+        incoming_messages: Sequence[DialogueMessage],
+    ) -> list[dict[str, Any]]:
+        return [
+            {
+                "phase": item.phase,
+                "round": item.round_number,
+                "sender": item.sender,
+                "title": item.title,
+                "message_type": item.message_type,
+                "focus": item.focus,
+                "summary": item.content,
+                "claims": item.payload.claims[:2],
+                "attack_points": item.payload.attack_points[:2],
+            }
+            for item in incoming_messages
+        ]
+
     @staticmethod
     def _normalize_risk_level(raw: Any) -> str:
         normalized = str(raw or "").strip().lower()
@@ -978,3 +1446,10 @@ class OpponentAnalysisProcessor:
         ]
         points = [item for item in candidates if len(item) >= 8]
         return points[:limit]
+
+    @staticmethod
+    def _clip_text(value: str, limit: int) -> str:
+        normalized = " ".join((value or "").split())
+        if len(normalized) <= limit:
+            return normalized
+        return normalized[: limit - 3].rstrip() + "..."
