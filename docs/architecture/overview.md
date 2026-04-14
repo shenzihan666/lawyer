@@ -33,7 +33,7 @@ Implemented now:
 - Milvus-based hybrid retrieval with Redis cache support
 - post-retrieval rerank with dedicated endpoint or chat-model fallback
 - single-turn grounded answer generation with inline citations
-- persisted multi-agent opponent prediction runs with event replay and SSE updates
+- persisted multi-agent opponent prediction runs with isolated agent memory, inter-agent dialogue, event replay, and SSE updates
 - centralized analytics and trajectory persistence for tool governance and workflow recovery
 - startup reconciliation for queued or interrupted background jobs
 - versioned prompt segments with token-budget-aware assembly for core agent paths

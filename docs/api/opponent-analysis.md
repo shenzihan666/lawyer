@@ -70,15 +70,13 @@ Delete the run and its persisted event history.
 
 ## Workflow Phases
 
-Fixed phase order:
+Current runtime uses a shared `context_brief` plus an isolated multi-agent dialogue loop.
 
-1. `context_brief`
-2. `party_projection`
-3. `counsel_projection`
-4. `bench_review`
-5. `strategy_response`
-6. `revision`
-7. `finalize`
+- Each agent has its own inbox and private memory.
+- Agents can choose one or more recipients on each turn.
+- Initial turns usually cover `party_projection`, `counsel_projection`, `bench_review`, and `strategy_response`.
+- Follow-up turns are persisted under `revision`.
+- The run ends with `finalize`.
 
 ## Event Model
 
